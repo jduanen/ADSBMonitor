@@ -1,0 +1,379 @@
+
+* SW
+  - ADS-B DB -- can get routes from callsigns/UIDs
+    * https://api.adsbdb.com/v0/callsign/<callsign>
+    * e.g., 'https://api.adsbdb.com/v0/callsign/RPA4585'
+  - ????
+    * https://api.adsb.lol/v2
+    * _headers = {"accept": "application/json","Content-Type": "application/json"}
+    * _data = '{"planes": [{"callsign": "' + callsign.strip() + '","lat": 0,"lng": 0}]}'
+    * response = requests.post(_url, headers = _headers, data = _data)
+  - adsbrx.lan
+    * http://adsbrx.lan:8080/?sidebar=hide&legend=hide
+      - what I'm using in the HA dashboard called "Aircraft"
+    * FR24 page Dashboard
+      - url: http://adsbrx.lan:8080/?sidebar=show&legend=show&banner=show&altitudeChart=show&zoomIn=15&lat=37.4599669&lon=-122.1652244&alts=1000,5000
+      - sandbox: false
+    --> need to script automation to set up display (range rings, sidebar, zoom factor, etc.)
+
+* Set up dual-band, HA-integrated, local-only, ADS-B receiver
+  - flash latest 64bit PiOS Lite to uSD card (using rpi-imager)
+    * 'QT_QPA_PLATFORM=xcb rpi-imager'
+    * enable ssh and add 'jdn' user
+    --> Trixie Lite install failed, so installed full OS
+    * run 'sudo raspi-config' to configure the system
+    * enable ssh
+      - 'sudo systemctl enable --now ssh'
+    * disable GUI (persistently)
+      - boot to multi-user console mode and reboot
+        * 'sudo systemctl set-default multi-user.target'
+        * 'sudo reboot'
+    * reenable GUI
+      - 'sudo systemctl set-default graphical.target'
+    --> there's not dump1090/dump978 for Trixie, so I went to Bookworm Lite
+    --> there's a note saying you need >1GB to build the packages, so I might have to switch the HW
+  - upgrade the install and load necessary packages
+'''
+sudo apt update && sudo apt full-upgrade -y
+sudo apt install -y rtl-sdr lighttpd git cmake build-essential pkg-config libusb-1.0-0-dev librtlsdr-dev libncurses5-dev libbladerf-dev
+sudo reboot
+'''
+  - config the dongles
+    * stop these daemons if they're running
+      - 'sudo systemctl stop dump1090-fa dump978-fa'
+    * set serial number for FlightAware 1090 MHz dongle
+      - plug in only the FlightAware 1090 dongle
+      - Run 'rtl_eeprom -s 00001090' and confirm with y when prompted
+      - unplug it and physically label it “00001090”
+    * set serial number for RTL‑SDR V3 978 MHz dongle
+      - plug in only the RTL‑SDR V3
+      - run 'rtl_eeprom -s 00000978' and confirm with y when prompted
+      - unplug and physically label it “00000978”
+  - test dongles
+    * plug in both USB dongles
+    * run 'rtl_test -t' to test both devices
+      - should show two devices, with serial numbers "00001090" and "00000978"
+  - build and install dump1090-fa
+'''
+sudo apt-get install build-essential fakeroot debhelper librtlsdr-dev pkg-config libncurses5-dev libbladerf-dev libhackrf-dev liblimesuite-dev libsoapysdr-dev devscripts
+
+git clone --recursive https://github.com/flightaware/dump1090.git
+cd dump1090
+./prepare-build.sh bookworm
+cd package-bookworm
+dpkg-buildpackage -b --no-sign --build-profiles=custom,rtlsdr 
+cd ./debian
+sudo apt update
+sudo apt
+sudo apt install ./dump1090-fa_10.2_arm64.deb 
+sudo /usr/share/dump1090-fa/generate-wisdom  #### if installed via .deb
+make wisdom.local  #### manual build
+sudo cp /tmp/wisdom.<#>/wisdom.local /etc/dump1090-fa/
+sudo mkdir -p /etc/dump1090-fa
+sudo cp wisdom.local /etc/dump1090-fa/
+'''
+  - enable swap to build dump978-fa from source
+'''
+sudo systemctl stop dump978-fa dump1090-fa  # Free RAM
+sudo fallocate -l 2G /swapfile              # Create 2GB swap
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+free -h  # Verify ~2GB swap available
+'''
+  - build and install dump978-fa
+'''
+sudo apt-get install \
+  build-essential \
+  debhelper \
+#  dh-systemd \
+  libboost-system-dev \
+  libboost-program-options-dev \
+  libboost-regex-dev \
+  libboost-filesystem-dev \
+  libsoapysdr-dev
+
+git clone --recursive https://github.com/flightaware/dump978.git
+cd dump978
+dpkg-buildpackage -b --no-sign
+
+sudo apt-get install soapysdr-module-rtlsdr
+cd ..
+sudo apt install ./dump978-fa_10.2_arm64.deb
+sudo apt install ./skyaware978_10.2_arm64.deb 
+
+sudo ./dump978-fa --sdr driver=rtlsdr,serial=00000978 --net --net-http-port 8081 ## Test
+'''
+  - configure the services with these files
+    * '/etc/systemd/system/dump1090-fa.service'
+'''
+[Unit]
+Description=dump1090-fa
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/dump1090-fa --device-index 00001090 --net --net-http-port 8080
+Restart=always
+User=pi
+
+[Install]
+WantedBy=multi-user.target
+'''
+    * '/etc/systemd/system/dump978-fa.service'
+'''
+[Unit]
+Description=dump1090-fa
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/dump978-fa --device-index 00000978 --net --net-http-port 8081
+Restart=always
+User=pi
+
+[Install]
+WantedBy=multi-user.target
+'''
+  - configure the services
+    * `sudo ex /etc/default/dump1090-fa`
+      - RECEIVER_LAT=37.4599669
+      - RECEIVER_LON=-122.1652244
+        * @37.4599669,-122.1652244,18.58
+      - MAX_RANGE=36 (in NM)  #### FIXME
+      - envvars used by start script
+        * RECEIVER_OPTIONS="--device-index 00001090 --gain -10 --ppm 0"
+          - gain=-10: means use AGC
+          - ppm=0: ????
+        * NET_OPTIONS="--net --net-http-port 8080 --net-ro-port 30002 --net-beast 30005"
+          - net: enable TCP output
+          - net-http-port: web/JSON listen port
+          - net-ro-port: raw output listen port
+          - net-beast: Beast-format output (used by other feeders)
+        * JSON_OPTIONS="--json-location-accuracy 2"
+          - json-location-accuracy: digits of precision
+        * DECODER_OPTIONS: rarely changed
+    * `sudo ex /etc/default/dump978-fa`
+      - ENABLED=yes
+      - RECEIVER_OPTIONS="--sdr driver=rtlsdr,serial=00000978 --format CS8"
+      - DECODER_OPTIONS=""
+      - NET_OPTIONS="--raw-port 30978 --json-port 30979"
+    * `sudo ex /etc/default/skyaware978`
+      - ENABLED=yes
+      - NET_OPTIONS="--connect localhost:30978 --reconnect-interval 30"
+      - HISTORY_OPTIONS="--history-count 120 --history-interval 30"
+      - POSITION="--lat 37.4599669 --lon -122.1652244"
+      - BEAST_INPUT="localhost:30005,localhost:30978"
+      - SBS_INPUT="localhost:30003,localhost:30979"
+      - LAT="37.4599669"
+      - LON="-122.1652244"
+      - ALT="18.58"          # Site altitude in feet
+
+  - enable the services
+'''
+sudo systemctl daemon-reload
+sudo systemctl enable --now dump1090-fa dump978-fa
+'''
+  - add SkyAware (local map viewer)
+'''
+sudo apt install -y skyaware978
+sudo mkdir -p /etc/skyaware978
+sudo ex /etc/skyaware978/config.json
+  '''
+{
+  "http_port": 8754,
+  "receivers": [
+    {
+      "name": "1090ES",
+      "host": "127.0.0.1",
+      "port": 30005,
+      "format": "beast"
+    },
+    {
+      "name": "978UAT", 
+      "host": "127.0.0.1",
+      "port": 30978,
+      "format": "uat-raw"
+    }
+  ]
+}
+  '''
+sudo systemctl enable --now skyaware978
+'''
+  - the command `sudo netstat -tlnp | grep -E '3000|309|8754'` should show:
+    * 30005 (dump1090 Beast → SkyAware)
+    * 30978 (dump978 raw → SkyAware)
+    * 8754 (SkyAware web)
+
+  - view fused 1090/978 map at 'http://<ipa>:8754'
+    * 978 appears as UAT on the map
+
+* Integrate ADS-B receiver with Home Assistant using REST interface
+  - add REST sensors in 'configuration.yaml' (or via GUI????)
+'''
+sensor:
+  - platform: rest
+    name: ADSB Aircraft 1090
+    resource: http://<ipa>:8080/dump1090-fa/data/aircraft.json
+    value_template: "{{ value_json.aircraft|length }}"
+    json_attributes:
+      - aircraft
+    scan_interval: 10
+
+  - platform: rest  # for 978 on :30979
+    name: ADSB Aircraft 978 UAT
+    resource: http://<pi-ip>:30979/aircraft.json
+    value_template: "{{ value_json.aircraft|length }}"
+    json_attributes:
+      - aircraft
+    scan_interval: 10
+'''
+  - embed SkyAware map in Lovelace with webpage card
+    * 'http://<pi-ip>:8754/?sidebar=hide'
+'''
+type: iframe
+url: http://<pi-ip>:8754/?sidebar=hide&legend=hide
+aspect_ratio: 100%
+'''
+  - for aircraft details (ICAO, altitude, speed, etc.), parse aircraft JSON attributes into template sensors or use flightmonitor_MQTTtoHA for MQTT auto-discovery
+
+* HA Automations
+  - ????
+
+* look at what's listening/connected
+  - sudo netstat -tlnp
+
+* lighttpd serves 'http://adsbrx.lan'
+
+* check dump* with `nc localhost <portNum>`
+
+* dump1090-fa
+  - outputs (updated once a second)
+    * Port
+      - 30002: Raw Hex
+      - 30003: SBS/BaseStation, CSV-like lines
+      - 30005: Beast Binary
+    * /run/dump1090-fa/
+      - aircraft.json: json with current aircraft
+        * contains: ICAO, position, altitude, speed, track, etc.
+        * this is what you want to read
+      - history_<min>.json: snapshots of aircraft.json
+      - receiver.json: receiver info -- version, refresh, history, lat, lon
+      - stats.json: receiver stats (number of planes tracked, signal rates, etc.)
+    * http endpoint: ????
+  - to run this after building it from source
+    * make a place to put the html and move it there
+'''
+sudo mkdir -p /usr/share/dump1090-fa/html
+sudo cp -r ${HOME}/Code/dump1090/public_html/* /usr/share/dump1090-fa/html/
+'''
+    * configure display via URL query strings
+      - http://adsbrx.lan/skyaware/?parameter=value
+        * banner: show/hide
+        * altitudeChart: show/hide
+        * aircraftTrails: show/hide
+        * map: show/hide
+        * sidebar: show/hide
+        * zoomOut: 0 - 5
+        * zoomIn: 0 - 5
+        * moveNorth: 0 - 5
+        * moveSouth: 0 - 5
+        * moveWest: 0 - 5
+        * moveEast: 0 - 5
+        * displayUnits: nautical/imperial/metric
+        * rangeRings: show/hide
+        * ringCount: integer
+        * ringBaseDistance: integer
+        * ringInterval: integer
+    * create conf file: /etc/lighttpd/conf-enabled/89-dump1090-fa.conf
+'''
+sudo tee /etc/lighttpd/conf-enabled/89-dump1090-fa.conf >/dev/null <<'EOF'
+alias.url += (
+  "/skyaware/data/" => "/run/dump1090-fa/",
+  "/skyaware/"      => "/usr/share/dump1090-fa/html/"
+)
+EOF
+'''
+    * restart http server
+      - `sudo systemctl restart lighttpd`
+    * view map in browser
+      - 'http://adsbrx.lan/skyaware/?rangeRings=show&ringCount=8&ringInterval=4&ringBaseDistance=2'
+
+* dump978-fa
+  - outputs
+    * Port
+      - 30978: raw demodulated UAT (similar to dump1090-fa port 30002)
+      - 30979: decoded json per message (altitude, position, ID, etc.)
+    * no file or HTTP outputs available
+      - stream-only feeds, need tools like (uat2esnt, readsb, or piaware)
+    --> don't see anything have to look and see if I'm missing something
+    ===> UAT doesn't exist outside of the east coast
+
+* skyaware978
+  - merges dump1090-fa (1090ES) and dump979-fa (UAT978) data into a unifed web interface and json feeds
+  - install
+    * `sudo bash -c "$(wget -O - https://raw.githubusercontent.com/abcd567a/piaware-ubuntu-debian-amd64/master/install-dump978-fa.sh)"`
+    --> already installed when I built and installed the dump978-fa deb
+  - outputs
+    * Ports
+      - 30978: raw merged messages
+      - 30979: JSON aircraft list, merged 1090+978 messages
+    * Files (updated ~1Hz)
+      - '/run/skyaware978/' -- same as dump1090
+        * aircraft.json has merged data 
+    * Web (map interface)
+      - 'http://adsbrx.lan/skyaware978/'
+  --> it appears that this has to be installed in order to offer the web view at :8080
+
+* tar1090
+  - improved web interface for ADS-B decoders using dump1090-fa
+  - https://github.com/wiedehopf/tar1090
+  - installation
+    * `sudo bash -c "$(wget -nv -O - https://github.com/wiedehopf/tar1090/raw/master/install.sh)"`
+  - configure
+    * `sudo ex /etc/default/tar1090`
+      - can add dump978 here if I decide to go back to it
+    * `sudo ex /usr/local/share/tar1090/html/config.js`
+      - DefaultZoomLvl   = 13;
+      - actual_range_show = true;
+      - SiteCircles = true;
+      - SiteCirclesDistances = new Array(2,4,8,16,32);
+      - HideCols = [
+        * "#route",
+        * "#type",
+        * "#squawk",
+        * "#altitude",
+        * "#speed",
+        * "#sitedist",
+        * "#rssi",
+  - get map view
+    * 'http://adsbrx.lan/tar1090'
+    * 'http://adsbrx.lan:8504/'
+  - get tracks
+    * 'http://adsbrx.lan/tar1090/?pTracks'
+  - example filters (uses js regex)
+    * 'B73.': B737 family (any value in last char)
+    * 'B73.|B3.M|A32.|A2.N': B373/A320 families
+    * '^(?!A320)': exclude A320
+    * '^(?!(A32.|B73.))': exclude A32* and B73*
+    * 'H..': helicopters
+    * 'H.T': helicopters with turbine engines
+    * 'L2J': landplanes with two jet engines
+    * 'L.P': landplanes with any number of piston engines
+    * '.4.': everything with 4 engines of any type
+    * '.2.|.3.|.4.': everthing with 2, 3, or 4 engines of any type
+  - keyboard shortcuts
+    * q/e: zoom in/out
+    * a/d: move east/west
+    * w/s: move north/south
+    * c or ESC: clear the selection
+    * m: toggle multi-select
+    * t: select all aircraft
+    * b: toggle map brightness
+
+* other sites
+  - https://adsb.lol/
+  - https://globe.adsbexchange.com/
+  - https://globe.airplanes.live/
+  - https://globe.adsb.fi/
+  - https://gpsjam.org/
+  - https://adsb.exposed/
+  - https://tech.marksblogg.com/global-flight-tracking-adsb.html
