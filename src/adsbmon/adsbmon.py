@@ -13,8 +13,14 @@ import argparse
 import json
 import logging
 import os
+from pathlib import Path
+import requests
 import sys
+import time
 import yaml
+
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
 
 
 ADSB_MON_VERSION_MAJOR = 0
@@ -30,11 +36,25 @@ DEFAULTS = {
     'verbose': 0
 }
 
+
+class JsonHandler(FileSystemEventHandler):
+    def __init__(self, filepath):
+        self.filepath = Path(filepath)
+
+    def on_modified(self, event):
+        if event.src_path == str(self.filepath):
+            self.read_json()
+
+    def read_json(self):
+        try:
+            data = json.loads(self.filepath.read_text('utf-8'))
+            print("File updated:", data)  # or process data
+        except Exception as e:
+            print(f"Error reading {self.filepath}: {e}")
+
+
 def getOpts():
     ap = argparse.ArgumentParser()
-    ap.add_argument(
-        "-a", "--adsbPath", action="store", type=str,
-       help="Path to where the dump1090-fa program stores its data")
     ap.add_argument(
         "-c", "--configFilePath", action="store", type=str,
         help="Path to the configuration file")
@@ -51,6 +71,8 @@ def getOpts():
     ap.add_argument(
         "-v", "--verbose", action="count",
         help="Print debug info")
+    ap.add_argument("adsbPath",
+        help="Path to where the dump1090-fa program stores its data")
     cliOpts = ap.parse_args().__dict__
 
     # cliOpts=cmd line options; fileOpts=conf file options; DEFAULT=default options
@@ -91,12 +113,35 @@ def getOpts():
         logging.basicConfig(level=c['logLevel'])
 
     if 'adsbPath' not in c:
-        logging.error("Must specify the path to the aircraft.json file")
+        logging.error("Must specify the path to where dump1090-fa stores its files")
         sys.exit(1)
     return c
 
 def run(options):
-    json.dump(options, sys.stdout, indent=4, sort_keys=True)
+    if options['verbose'] > 1:
+        json.dump(options, sys.stdout, indent=4, sort_keys=True)
+
+    dumpDir = Path(options['adsbPath'])
+
+    if options['readHistory']:
+        historyFiles = sorted(dumpDir.glob("history_*.json"),
+                              key=lambda p: p.stat().st_mtime)
+        for path in historyFiles:
+            logging.info(f"Processing history file: {path.name}")
+            try:
+                data = json.loads(path.read_text('utf-8'))
+                #### TODO process message data
+            except json.JSONDecodeError:
+                logging.warning(f"Invalid JSON in: {path}")
+            except UnicodeDecodeError:
+                logging.warning(f"Can't read: {path}")
+
+    
+
+    #### TODO in a loop, watch for changes in aircraft.json file
+    #### TODO update tracks/vehicles
+    #### TODO emit tracks
+    #### TODO GC tracks/vehicles
 
 if __name__ == "__main__":
     opts = getOpts()
