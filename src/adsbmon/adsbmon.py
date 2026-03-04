@@ -49,12 +49,13 @@ def getOpts():
         "-r", "--readHistory", action="store_true", default=False,
         help="Read history files on startup")
     ap.add_argument(
-        "-v", "--verbose", action="count", default=0,
+        "-v", "--verbose", action="count",
         help="Print debug info")
     cliOpts = ap.parse_args().__dict__
 
     # cliOpts=cmd line options; fileOpts=conf file options; DEFAULT=default options
-    conf = {'version': ADSB_MON_VERSION, 'cliOpts': cliOpts, 'fileOpts': {}, 'config': {}}
+    conf = {'version': ADSB_MON_VERSION, 'cliOpts': cliOpts, 'fileOpts': {},
+            'config': {}, 'defaults': DEFAULTS}
     if conf['cliOpts']['configFilePath']:
         configFilePath = cliOpts['configFilePath']
     else:
@@ -72,12 +73,14 @@ def getOpts():
 
     c = conf['config']
     for opt in [action.dest for action in ap._actions if action.dest != 'help']:
-        if conf['cliOpts'].get(opt):
+        if opt in conf['cliOpts'] and conf['cliOpts'][opt] is not None:
             c[opt] = conf['cliOpts'][opt]
-        elif conf['fileOpts'].get(opt):
+        elif opt in conf['fileOpts'] and conf['fileOpts'][opt] is not None:
             c[opt] = conf['fileOpts'][opt]
+        elif opt in conf['defaults'] and conf['defaults'][opt] is not None:
+            c[opt] = conf['defaults'][opt]
         else:
-            c[opt] = DEFAULTS.get(opt)
+            c[opt] = None
     if c['verbose'] > 1:
         json.dump(conf, sys.stdout, indent=4, sort_keys=True)
         print("")
