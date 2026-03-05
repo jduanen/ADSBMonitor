@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 #
 # Script that monitors the dump1090-fa program, maintains tracks of currently
 #  visible crafts, and emits MQTT messages that contain track updates.
@@ -10,11 +10,13 @@
 
 
 import argparse
+from datetime import datetime
 import json
 import logging
 import os
 from pathlib import Path
 import requests
+import signal
 import sys
 import time
 import yaml
@@ -22,19 +24,28 @@ import yaml
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
+from Track import Track
+
+import pdb  ## pdb.set_trace()
+
 
 ADSB_MON_VERSION_MAJOR = 0
 ADSB_MON_VERSION_MINOR = 1
 ADSB_MON_VERSION_PATCH = 0
 ADSB_MON_VERSION = f"{ADSB_MON_VERSION_MAJOR}.{ADSB_MON_VERSION_MINOR}.{ADSB_MON_VERSION_PATCH}"
 
+AIRCRAFT_JSON_FILE = "aircraft.json"
+
 DEFAULTS = {
     'configFilePath': "./config.yaml",
     'logFile': None,
-    'logLevel': "INFO",  #"DEBUG"  #"WARNING",
+    'logLevel': "WARNING",
     'readHistory': False,
     'verbose': 0
 }
+
+running = True
+tracks = {}
 
 
 class JsonHandler(FileSystemEventHandler):
@@ -48,10 +59,30 @@ class JsonHandler(FileSystemEventHandler):
     def read_json(self):
         try:
             data = json.loads(self.filepath.read_text('utf-8'))
-            print("File updated:", data)  # or process data
+            ts = datetime.fromtimestamp(data['now'])
+            logging.info(f"aircraft.json updated @ {datetime.fromtimestamp(time.time())}; now={ts}; {len(data['aircraft'])} msgs")
+            #### TODO put data integrity checks here -- data.now, data.messages, data.aircraft[]
+            for msg in data['aircraft']:
+                processMsg(msg, data['now'])
         except Exception as e:
-            print(f"Error reading {self.filepath}: {e}")
+            logging.error(f"Failed to read {self.filepath}: {e}")
+        printTracks()  #### TMP TMP TMP
 
+def processMsg(message, rxTime):
+    if message['hex'] in tracks:
+        tracks[message['hex']].update(message, rxTime)
+    else:
+        tracks[message['hex']] = Track(message, rxTime)
+
+def printTracks():
+    logging.info(f"Number of Tracks: {len(tracks)}")
+    for hexCode, track in tracks.items():
+        logging.info(f"Track: {hexCode}")
+        track.print()
+
+def stop():
+    global running
+    running = False
 
 def getOpts():
     ap = argparse.ArgumentParser()
@@ -127,22 +158,45 @@ def run(options):
         historyFiles = sorted(dumpDir.glob("history_*.json"),
                               key=lambda p: p.stat().st_mtime)
         for path in historyFiles:
-            logging.info(f"Processing history file: {path.name}")
             try:
                 data = json.loads(path.read_text('utf-8'))
-                #### TODO process message data
+                ts = datetime.fromtimestamp(data['now'])
+                logging.info(f"read history file {path.name}; now={ts}; {len(data['aircraft'])} msgs")
+                #### TODO put data integrity checks here -- data.now, data.messages, data.aircraft[]
+                for msg in data['aircraft']:
+                    processMsg(msg, data['now'])
             except json.JSONDecodeError:
                 logging.warning(f"Invalid JSON in: {path}")
             except UnicodeDecodeError:
                 logging.warning(f"Can't read: {path}")
 
-    
+    printTracks()  #### TMP TMP TMP
 
-    #### TODO in a loop, watch for changes in aircraft.json file
-    #### TODO update tracks/vehicles
-    #### TODO emit tracks
-    #### TODO GC tracks/vehicles
+    observer = Observer()
+    aircraftJsonPath = dumpDir / AIRCRAFT_JSON_FILE
+    handler = JsonHandler(str(aircraftJsonPath))
+    observer.schedule(handler, path=str(aircraftJsonPath), recursive=False)
+    observer.start()
+    try:
+        while running:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        observer.stop()
+    observer.join()
 
 if __name__ == "__main__":
     opts = getOpts()
     run(opts)
+
+    '''
+    def signalHandler(sig, frame):
+        '' Catch SIGHUP to force a restart and SIGINT to stop.""
+        ''
+        if sig == signal.SIGHUP:
+            logging.info("SIGHUP")
+            stop()
+        elif sig == signal.SIGINT:
+            logging.info("SIGINT")
+            stop()
+#            exit(1)
+    '''
