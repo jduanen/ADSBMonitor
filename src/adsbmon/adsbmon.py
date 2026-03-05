@@ -106,6 +106,7 @@ def getOpts():
     cliOpts = ap.parse_args().__dict__
 
     # cliOpts=cmd line options; fileOpts=conf file options; DEFAULT=default options
+    configFilePath = None
     conf = {'version': ADSB_MON_VERSION, 'cliOpts': cliOpts, 'fileOpts': {},
             'config': {}, 'defaults': DEFAULTS}
     if conf['cliOpts']['configFilePath']:
