@@ -21,7 +21,7 @@ import sys
 import time
 import yaml
 
-from watchdog.observers import Observer
+from watchdog.observers.polling import PollingObserver
 from watchdog.events import FileSystemEventHandler
 
 from Track import Track
@@ -51,17 +51,8 @@ class JsonHandler(FileSystemEventHandler):
     def __init__(self, filepath):
         self.filepath = Path(filepath)
 
-#    def on_any_event(self, event):
-#        print(f"On anyevent: {event}")
-
-    def on_created(self, event):
-        print("On created")
-        if event.src_path.endswith('aircraft.json'):
-            self.read_aircraft_json()
-
-    def on_modified(self, event):
-        print("On modified")
-        if event.src_path.endswith('aircraft.json'):
+    def on_any_event(self, event):
+        if event.src_path.endswith('aircraft.json') and event.is_directory is False:
             self.read_json()
 
     def read_json(self):
@@ -74,7 +65,8 @@ class JsonHandler(FileSystemEventHandler):
                 processMsg(msg, data['now'])
         except Exception as e:
             logging.error(f"Failed to read {self.filepath}: {e}")
-        printTracks()  #### TMP TMP TMP
+#        printTracks()  #### TMP TMP TMP
+
 
 def processMsg(message, rxTime):
     if message['hex'] in tracks:
@@ -82,15 +74,18 @@ def processMsg(message, rxTime):
     else:
         tracks[message['hex']] = Track(message, rxTime)
 
+
 def printTracks():
     logging.info(f"Number of Tracks: {len(tracks)}")
     for hexCode, track in tracks.items():
         logging.info(f"Track: {hexCode}")
         track.print()
 
+
 def stop():
     global running
     running = False
+
 
 def getOpts():
     ap = argparse.ArgumentParser()
@@ -103,7 +98,7 @@ def getOpts():
         help="Logging level")
     ap.add_argument(
         "-l", "--logFile", action="store", type=str,
-       help="Path to the logfile (create it if it doesn't exist)")
+        help="Path to the logfile (create it if it doesn't exist)")
     ap.add_argument(
         "-r", "--readHistory", action="store_true", default=False,
         help="Read history files on startup")
@@ -125,14 +120,14 @@ def getOpts():
             configFilePath = DEFAULTS['configFilePath']
     if configFilePath:
         if not os.path.exists(configFilePath):
-            print(f"ERROR: Invalid configuration file path: {configFilePath}")
+            print(f"ERROR: Invalid configuration file path: {configFilePath}", file=sys.stderr)
             exit(1)
         with open(configFilePath, "r") as confFile:
             fileOpts = list(yaml.load_all(confFile, Loader=yaml.Loader))
             if len(fileOpts) >= 1:
                 conf['fileOpts'] = fileOpts[0]
                 if len(fileOpts) > 1:
-                    print(f"WARNING: Multiple config docs in file. Using the first one")
+                    print("WARNING: Multiple config docs in file. Using the first one", file=sys.stderr)
 
     c = conf['config']
     for opt in [action.dest for action in ap._actions if action.dest != 'help']:
@@ -158,6 +153,7 @@ def getOpts():
         sys.exit(1)
     return c
 
+
 def run(options):
     if options['verbose'] > 1:
         json.dump(options, sys.stdout, indent=4, sort_keys=True)
@@ -180,9 +176,9 @@ def run(options):
             except UnicodeDecodeError:
                 logging.warning(f"Can't read: {path}")
 
-    printTracks()  #### TMP TMP TMP
+#    printTracks()  #### TMP TMP TMP
 
-    observer = Observer()
+    observer = PollingObserver()
     aircraftJsonPath = dumpDir / AIRCRAFT_JSON_FILE
     handler = JsonHandler(str(aircraftJsonPath))
     observer.schedule(handler, path=str(aircraftJsonPath), recursive=False)
@@ -193,6 +189,7 @@ def run(options):
     except KeyboardInterrupt:
         observer.stop()
     observer.join()
+
 
 if __name__ == "__main__":
     opts = getOpts()
