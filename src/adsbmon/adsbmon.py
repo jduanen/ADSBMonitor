@@ -37,7 +37,6 @@ ADSB_MON_VERSION = f"{ADSB_MON_VERSION_MAJOR}.{ADSB_MON_VERSION_MINOR}.{ADSB_MON
 AIRCRAFT_JSON_FILE = "aircraft.json"
 
 DEFAULTS = {
-    'configFilePath': "./config.yaml",
     'logFile': None,
     'logLevel': "WARNING",
     'readHistory': False,
@@ -112,7 +111,8 @@ def getOpts():
     if conf['cliOpts']['configFilePath']:
         configFilePath = cliOpts['configFilePath']
     else:
-        configFilePath = DEFAULTS['configFilePath']
+        if 'configFilePath' in DEFAULTS:
+            configFilePath = DEFAULTS['configFilePath']
     if configFilePath:
         if not os.path.exists(configFilePath):
             print(f"ERROR: Invalid configuration file path: {configFilePath}")
