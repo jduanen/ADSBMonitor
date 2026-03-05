@@ -51,6 +51,9 @@ class JsonHandler(FileSystemEventHandler):
     def __init__(self, filepath):
         self.filepath = Path(filepath)
 
+#    def on_any_event(self, event):
+#        print(f"On anyevent: {event}")
+
     def on_created(self, event):
         print("On created")
         if event.src_path.endswith('aircraft.json'):
@@ -58,7 +61,7 @@ class JsonHandler(FileSystemEventHandler):
 
     def on_modified(self, event):
         print("On modified")
-        if event.src_path == str(self.filepath):
+        if event.src_path.endswith('aircraft.json'):
             self.read_json()
 
     def read_json(self):
