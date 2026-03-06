@@ -110,7 +110,7 @@ def printTracks():
             track.print()
             if (numTracks := numTracks - 1):
                 print(",")
-        print("]\n")
+        print("]")
 
 
 def getOpts():
