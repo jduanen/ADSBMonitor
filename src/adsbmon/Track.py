@@ -3,7 +3,6 @@
 # Object that encapsulates a vehicle track
 
 import json
-import logging
 import sys
 import time
 
