@@ -18,6 +18,7 @@ from pathlib import Path
 import requests
 import signal
 import sys
+import threading
 import time
 import yaml
 
@@ -43,8 +44,9 @@ DEFAULTS = {
     'verbose': 0
 }
 
-running = True
 tracks = {}
+
+stopEvent = threading.Event()
 
 
 class JsonHandler(FileSystemEventHandler):
@@ -68,23 +70,47 @@ class JsonHandler(FileSystemEventHandler):
 #        printTracks()  #### TMP TMP TMP
 
 
+class ExitGracefully:
+    def __init__(self):
+        ''' Register signals that can cause an exit
+        '''
+        signal.signal(signal.SIGINT, self._signalHandler)   # Ctl-C
+        signal.signal(signal.SIGTERM, self._signalHandler)  # kill command
+        signal.signal(signal.SIGHUP, self._signalHandler)   # terminal closed
+
+    def _signalHandler(self, sig, frame):
+        ''' Catch SIGHUP to force a restart and SIGINT to stop
+        '''
+        match sig:
+            case signal.SIGHUP:
+                logging.info("SIGHUP: stopping")
+                stopEvent.set()
+            case signal.SIGINT:
+                logging.info("SIGINT: stopping")
+                stopEvent.set()
+            case _:
+                logging.info(f"unknown signal: {sig}")
+
+
 def processMsg(message, rxTime):
     if message['hex'] in tracks:
         tracks[message['hex']].update(message, rxTime)
+        logging.debug(f"Created new track: {message['hex']}")
     else:
         tracks[message['hex']] = Track(message, rxTime)
+        logging.debug(f"Updated track: {message['hex']}")
 
 
 def printTracks():
-    logging.info(f"Number of Tracks: {len(tracks)}")
-    for hexCode, track in tracks.items():
-        logging.info(f"Track: {hexCode}")
-        track.print()
-
-
-def stop():
-    global running
-    running = False
+    numTracks = len(tracks)
+    logging.info(f"Number of Tracks: {numTracks}")
+    if numTracks:
+        print("[")
+        for hexCode, track in tracks.items():
+            track.print()
+            if (numTracks := numTracks - 1):
+                print(",")
+        print("]\n")
 
 
 def getOpts():
@@ -154,7 +180,12 @@ def getOpts():
     return c
 
 
-def run(options):
+def run(options, killer):
+    def usr1Handler(sig, frame):
+        printTracks()
+
+    signal.signal(signal.SIGUSR1, usr1Handler)   # 'kill -USR1' to print current tracks
+
     if options['verbose'] > 1:
         json.dump(options, sys.stdout, indent=4, sort_keys=True)
 
@@ -176,34 +207,28 @@ def run(options):
             except UnicodeDecodeError:
                 logging.warning(f"Can't read: {path}")
 
-#    printTracks()  #### TMP TMP TMP
+    printTracks()  #### TMP TMP TMP
 
     observer = PollingObserver()
     aircraftJsonPath = dumpDir / AIRCRAFT_JSON_FILE
     handler = JsonHandler(str(aircraftJsonPath))
     observer.schedule(handler, path=str(aircraftJsonPath), recursive=False)
     observer.start()
+    logging.debug(f"Watching {str(aircraftJsonPath)}...")
     try:
-        while running:
-            time.sleep(1)
-    except KeyboardInterrupt:
+        while observer.is_alive() and not stopEvent.is_set():
+            if stopEvent.wait(1.0):  # 1s poll + check signal
+                break
+    finally:
         observer.stop()
-    observer.join()
+        observer.join()
+        logging.debug("Shutdown complete")
+
+    if opts['verbose']:
+        printTracks()
 
 
 if __name__ == "__main__":
+    killer = ExitGracefully()
     opts = getOpts()
-    run(opts)
-
-    '''
-    def signalHandler(sig, frame):
-        '' Catch SIGHUP to force a restart and SIGINT to stop.""
-        ''
-        if sig == signal.SIGHUP:
-            logging.info("SIGHUP")
-            stop()
-        elif sig == signal.SIGINT:
-            logging.info("SIGINT")
-            stop()
-#            exit(1)
-    '''
+    run(opts, killer)
