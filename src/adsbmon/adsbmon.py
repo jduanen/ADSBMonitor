@@ -67,7 +67,6 @@ class JsonHandler(FileSystemEventHandler):
                 processMsg(msg, data['now'])
         except Exception as e:
             logging.error(f"Failed to read {self.filepath}: {e}")
-#        printTracks()  #### TMP TMP TMP
 
 
 class ExitGracefully:
@@ -206,8 +205,6 @@ def run(options, killer):
                 logging.warning(f"Invalid JSON in: {path}")
             except UnicodeDecodeError:
                 logging.warning(f"Can't read: {path}")
-
-    printTracks()  #### TMP TMP TMP
 
     observer = PollingObserver()
     aircraftJsonPath = dumpDir / AIRCRAFT_JSON_FILE
