@@ -5,9 +5,7 @@
 #
 # N.B. options precedence order: cmd line -> conf file -> defaults
 
-
 #### TODO make a library function that acts as a framework for options
-
 
 import argparse
 from datetime import datetime
@@ -15,7 +13,6 @@ import json
 import logging
 import os
 from pathlib import Path
-import requests
 import signal
 import sys
 import threading
@@ -26,6 +23,7 @@ from watchdog.observers.polling import PollingObserver
 from watchdog.events import FileSystemEventHandler
 
 from Track import Track
+from MyMqtt import MyMqtt
 
 import pdb  ## pdb.set_trace()
 
@@ -37,16 +35,25 @@ ADSB_MON_VERSION = f"{ADSB_MON_VERSION_MAJOR}.{ADSB_MON_VERSION_MINOR}.{ADSB_MON
 
 AIRCRAFT_JSON_FILE = "aircraft.json"
 
+MQTT_CLIENT_ID = "adsb_vehicles"
+
 DEFAULTS = {
     'logFile': None,
     'logLevel': "WARNING",
     'readHistory': False,
+    'mqttHost': "homeassitant.lan",
+    'mqttPort': 1883,
+    'mqttUsername': None,
+    'mqttPasswd': None,
+    'mqttKeepalive': 60,  # 1min
     'verbose': 0
 }
 
 tracks = {}
 
 stopEvent = threading.Event()
+
+mqttClient = None
 
 
 class JsonHandler(FileSystemEventHandler):
@@ -91,13 +98,45 @@ class ExitGracefully:
                 logging.info(f"unknown signal: {sig}")
 
 
+def publishDiscoveryMsg(message, timestamp):
+    topic = f"homeassistant/sensor/adsb_{message['hex']}/config"
+    msg = {
+        "name": f"ADS-B Flight {message['hex']}",
+        "unique_id": f"{message['hex']}",
+        "state_topic": f"adsb/planes/{message['hex']}/state",
+        "unit_of_measurement": "vehicles",
+        "device": {
+            "identifiers": [f"adsb_vehicle_{message['hex']}"],
+            "name": f"Vehicle {message['hex']}",
+        },
+        "json_attributes_topic": f"adsb/vehicles/state",
+        "value_template": "{{ value_json.icao24 }}",
+        "device_class": None,
+        "state_class": None,
+        "origin": {
+            "name": "ADS-B Receiver",
+            "sw": 1.0
+        }
+    }
+    mqttClient.publishJson(topic, msg, retain=True)
+
+
+def publishUpdateMsg(message, timestamp):
+    topic = f"adsb/planes/{message['hex']}/state"
+    mqttClient.publishJson(topic, message)
+
+
 def processMsg(message, rxTime):
     if message['hex'] in tracks:
         tracks[message['hex']].update(message, rxTime)
-        logging.debug(f"Created new track: {message['hex']}")
-    else:
-        tracks[message['hex']] = Track(message, rxTime)
         logging.debug(f"Updated track: {message['hex']}")
+    else:
+        publishDiscoveryMsg(message, rxTime)
+        logging.debug(f"Published discovery message for {message['hex']}")
+        tracks[message['hex']] = Track(message, rxTime)
+        logging.debug(f"Created and updated new track: {message['hex']}")
+    publishUpdateMsg(message, rxTime)
+    logging.debug(f"Published update message for {message['hex']}")
 
 
 def printTracks():
@@ -112,11 +151,27 @@ def printTracks():
         print("]")
 
 
+#### FIXME improve the options code with
+'''
+args = parser.parse_args()
+if args.config:
+    config = configparser.ConfigParser()
+    config.read(args.config)
+    parser.set_defaults(**dict(config['DEFAULT']))
+    args = parser.parse_args()  # Override with CLI args
+'''
+
 def getOpts():
     ap = argparse.ArgumentParser()
     ap.add_argument(
-        "-c", "--configFilePath", action="store", type=str,
+        "-b", "--mqttHost", action="store", type=str,
         help="Path to the configuration file")
+    ap.add_argument(
+        "-c", "--configFilePath", action="store", type=str,
+        help="Path to the configuration YAML file")
+    ap.add_argument(
+        "-k", "--mqttKeepalive", action="store", type=int,
+        help="MQTT connection keep alive time (secs)")
     ap.add_argument(
         "-L", "--logLevel", action="store", type=str,
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
@@ -125,8 +180,17 @@ def getOpts():
         "-l", "--logFile", action="store", type=str,
         help="Path to the logfile (create it if it doesn't exist)")
     ap.add_argument(
+        "-P", "--mqttPasswd", action="store", type=str,
+        help="MQTT password")
+    ap.add_argument(
+        "-p", "--mqttPort", action="store", type=int,
+        help="MQTT Broker port number")
+    ap.add_argument(
         "-r", "--readHistory", action="store_true", default=False,
         help="Read history files on startup")
+    ap.add_argument(
+        "-u", "--mqttUsername", action="store", type=str,
+        help="MQTT user name")
     ap.add_argument(
         "-v", "--verbose", action="count",
         help="Print debug info")
@@ -176,10 +240,13 @@ def getOpts():
     if 'adsbPath' not in c:
         logging.error("Must specify the path to where dump1090-fa stores its files")
         sys.exit(1)
+
     return c
 
 
 def run(options, killer):
+    global mqttClient
+
     def usr1Handler(sig, frame):
         printTracks()
 
@@ -189,6 +256,13 @@ def run(options, killer):
         json.dump(options, sys.stdout, indent=4, sort_keys=True)
 
     dumpDir = Path(options['adsbPath'])
+
+    mqttClient = MyMqtt(MQTT_CLIENT_ID,
+                        options['mqttHost'], options['mqttPort'],
+                        options['mqttKeepalive'], options['mqttUsername'],
+                        options['mqttPasswd'])
+    if not mqttClient:
+        sys.exit(1)
 
     if options['readHistory']:
         historyFiles = sorted(dumpDir.glob("history_*.json"),
@@ -221,7 +295,7 @@ def run(options, killer):
         observer.join()
         logging.debug("Shutdown complete")
 
-    if opts['verbose']:
+    if opts['verbose'] > 2:
         printTracks()
 
 
