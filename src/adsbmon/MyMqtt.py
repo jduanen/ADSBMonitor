@@ -52,5 +52,6 @@ class MyMqtt:
         result = self.client.publish(topic, payload=jsonPayload, qos=1, retain=retain)
         if result.rc == mqtt.MQTT_ERR_SUCCESS:
             logging.info("Message sent to topic: %s", topic)
+            logging.debug(f"Message: {jsonPayload}")
         else:
             logging.warning("Failed to send message to topic: %s; error code: %d", topic, result.rc)
