@@ -44,8 +44,11 @@ class MyMqtt:
         logging.debug("MQTT Client initialized successfully")
 
     def publishJson(self, topic, msg, retain=False):
-        jsonPayload = json.dumps(msg)
-        logging.debug("On topic %s, Publish %s, Retain=%d", topic, jsonPayload, retain)
+        if isinstance(msg, str):
+            jsonPayload = msg
+        else:
+            jsonPayload = json.dumps(msg)
+        logging.debug("On topic '%s', Publish '%s', Retain='%d'", topic, jsonPayload, retain)
         result = self.client.publish(topic, payload=jsonPayload, qos=1, retain=retain)
         if result.rc == mqtt.MQTT_ERR_SUCCESS:
             logging.info("Message sent to topic: %s", topic)
