@@ -63,17 +63,17 @@ ADSB_MSGS_FIELDS_SORTED = [
 ]
 
 ICAO_EMERGENCY_SQUAWK_CODES = {
-    7700: "Emergency",      # immediate priority, ATC clears airspace, emergency services alerted
+    7500: "Hijack/Unlawful Interference",  # silent
     7600: "Radio Failure",  # can hear but can't transmit
-    7500: "Hijack/Unlawful Interference"  # silent
+    7700: "Emergency"       # immediate priority, ATC clears airspace, emergency services alerted
 }
 
 COMMON_NON_EMERGENCY_SPECIAL_CODES = {
     1200: "VFR flight",          # US/Canada
     2000: "IFR entering controlled airspace from uncontrolled",  # Global
     7000: "VFR flight",          # Europe/UK
-    7777: "Military",            # intercept operations
-    7600: "Radio comms failure"  # Global
+    7600: "Radio comms failure", # Global
+    7777: "Military"            # intercept operations
 }
 
 #### TODO make these values all formatting strings
