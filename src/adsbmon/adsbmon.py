@@ -61,8 +61,6 @@ stopEvent = threading.Event()
 
 mqttClient = None
 
-once = True  #### TMP TMP TMP
-
 
 class JsonHandler(FileSystemEventHandler):
     def __init__(self, filepath):
@@ -167,12 +165,9 @@ def publishUpdateMsg(message, timestamp):
 
 
 def processMsg(message, rxTime):
-    global once  #### TMP TMP TMP
-#    if message['hex'] in tracks:
-    if message['hex'] in tracks and once:  #### TMP TMP TMP
+    if message['hex'] in tracks:
         tracks[message['hex']].update(message, rxTime)
         logging.debug(f"Updated track: {message['hex']}")
-        once = False
     else:
         publishDiscoveryMsg(message, rxTime)
         logging.debug(f"Published discovery message for {message['hex']}")
