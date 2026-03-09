@@ -20,5 +20,8 @@ class Track:
             self.track['seenTime'] = rxTime - message['seen']
         self.track.update(message)
 
+    def getHexId(self):
+        return self.track['hex']
+
     def print(self):
         json.dump(self.track, sys.stdout, indent=4, sort_keys=True)
