@@ -43,6 +43,7 @@ ADSB_MON_VERSION_PATCH = 0
 ADSB_MON_VERSION = f"{ADSB_MON_VERSION_MAJOR}.{ADSB_MON_VERSION_MINOR}.{ADSB_MON_VERSION_PATCH}"
 
 TRACK_STALE_TIME = (60 * 5)  # consider a track stale if no updates in 5mins
+
 GC_RUN_INTERVAL = (60 * 1)   # run the garbage collector every 1mins
 
 TRACKS_COUNT_INTERVAL = (60 * 1)  # update the number of tracked vehicles detected every 1mins
@@ -65,7 +66,7 @@ DEFAULTS = {
 
 tracks = {}
 
-stopEvent = threading.Event()
+stopEvent = None
 
 lock = threading.Lock
 
@@ -87,7 +88,8 @@ class JsonHandler(FileSystemEventHandler):
             logging.info(f"aircraft.json updated @ {datetime.fromtimestamp(time.time())}; now={ts}; {len(data['aircraft'])} msgs")
             #### TODO put data integrity checks here -- data.now, data.messages, data.aircraft[]
             for msg in data['aircraft']:
-                processMsg(msg['hex'], msg, data['now'])
+                processMsg(msg['hex'], msg, data['now'])  #### TMP TMP TMP
+#                logging.debug(f"Skipped publishing update message for {msg['hex']}")  #### TMP TMP TMP
         except Exception as e:
             logging.error(f"Failed to read {self.filepath}: {e}")
 
@@ -205,14 +207,14 @@ def publishTracksCountDiscoveryMsg():
     mqttClient.publishJson(topic, msg, retain=True)
 
 
-def publishNullTracksCountDiscoveryMsg(hexId):
+def publishNullTracksCountDiscoveryMsg():
     topic = "homeassistant/sensor/adsb_monitor/count/config"
     mqttClient.publishJson(topic, "", retain=True)
 
 
-def publishTracksCountUpdateMsg():
+def publishTracksCountUpdateMsg(numTracks):
     topic = "adsb/monitor/count"
-    msg = len(tracks)
+    msg = numTracks
     mqttClient.publishJson(topic, msg)
 
 
@@ -231,13 +233,27 @@ def processMsg(hexId, message, rxTime):
     logging.debug(f"Published update message for {hexId}")
 
 
-def trackGC():
-    now = time.time()
-    staleTracks = [v for k, v in tracks.items() if now - v > TRACK_STALE_TIME]
-    for t in staleTracks:
-        with lock:
-            del tracks[t.getHexId()]
-        publishNullTrackDiscoveryMsg(t.getHexId())
+def tracksGCLoop():
+    while not stopEvent.is_set():
+        now = time.time()
+        logging.info(f"Garbage collect stale tracks @ {now}")
+        staleTracks = [v for k, v in tracks.items() if now - v > TRACK_STALE_TIME]
+        logging.debug(f"Number of stale tracks: {len(staleTracks)}")
+        for t in staleTracks:
+            publishNullTrackDiscoveryMsg(t.getHexId())
+            with lock:
+                del tracks[t.getHexId()]
+            logging.debug(f"Deleted state track: {t.getHexId}")
+        stopEvent.wait(GC_RUN_INTERVAL)
+    logging.debug("tracksGCLoop exited")
+
+def tracksCountLoop():
+    while not stopEvent.is_set():
+        numTracks = len(tracks)
+        publishTracksCountUpdateMsg(numTracks)
+        logging.debug(f"Updated tracks count: {numTracks}")
+        stopEvent.wait(TRACKS_COUNT_INTERVAL)
+    logging.debug("tracksCountLoop exited")
 
 
 def printTracks():
@@ -345,8 +361,12 @@ def getOpts():
     return c
 
 
-def run(options, killer):
-    global mqttClient
+def run(options):
+    global mqttClient, stopEvent
+
+    stopEvent = threading.Event()
+
+    ExitGracefully()
 
     def usr1Handler(sig, frame):
         printTracks()
@@ -394,14 +414,12 @@ def run(options, killer):
     observer.start()
     logging.debug(f"Watching {str(aircraftJsonPath)}...")
 
-    gcTimer = threading.Timer(GC_RUN_INTERVAL, trackGC)
-    gcTimer.daemon = True
-    gcTimer.start()
+    gcThread = threading.Thread(target=tracksGCLoop, daemon=True)
+    gcThread.start()
     logging.debug(f"Running Garbage Collector every {GC_RUN_INTERVAL}secs")
 
-    tracksCntTimer = threading.Timer(TRACKS_COUNT_INTERVAL, publishTracksCountUpdateMsg)
-    tracksCntTimer.daemon = True
-    tracksCntTimer.start()
+    tracksCntThread = threading.Thread(target=tracksCountLoop, daemon=True)
+    tracksCntThread.start()
     logging.debug(f"Running Vehicle Tracks count updater every {TRACKS_COUNT_INTERVAL}secs")
 
     try:
@@ -410,10 +428,8 @@ def run(options, killer):
                 break
     finally:
         observer.stop()
-        gcTimer.cancel()
-        tracksCntTimer.cancel()
-        logging.debug("Shutdown complete")
-    observer.join()
+        observer.join()
+    logging.debug("Observer exited")
 
     publishNullTracksCountDiscoveryMsg()
     publishServiceStateMsg(False)
@@ -423,8 +439,10 @@ def run(options, killer):
     if opts['verbose'] > 2:
         printTracks()
 
+    logging.debug("Shutdown complete, exiting")
+    sys.exit(0)
+
 
 if __name__ == "__main__":
-    killer = ExitGracefully()
     opts = getOpts()
-    run(opts, killer)
+    run(opts)
