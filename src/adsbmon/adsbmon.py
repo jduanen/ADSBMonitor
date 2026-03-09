@@ -6,13 +6,15 @@
 # N.B. options precedence order: cmd line -> conf file -> defaults
 #
 # MQTT publish topics:
-#  * publishServiceDiscoveryMsg: "homeassistant/binary_sensor/adsb_monitor/status/config"
-#  * publishServiceStateMsg: "adsb/monitor/status"
-#  * publishDiscoveryMsg: f"homeassistant/sensor/adsb_{message['hex']}/config"
-#  * publishNullDiscoveryMsg: f"homeassistant/sensor/adsb_{message['hex']}/config"
-#  * publishUpdateMsg: f"adsb/vehicles/{message['hex']}/state"
+#  * publishServiceDiscoveryMsg:          "homeassistant/binary_sensor/adsb_monitor/status/config"
+#  * publishServiceStateMsg:              "adsb/monitor/status"
+#  * publishTrackDiscoveryMsg:            f"homeassistant/sensor/adsb_{message['hex']}/config"
+#  * publishNullTrackDiscoveryMsg:        f"homeassistant/sensor/adsb_{message['hex']}/config"
+#  * publishTrackUpdateMsg:               f"adsb/vehicles/{message['hex']}/state"
+#  * publishTracksCountDiscoveryMsg:      "homeassistant/sensor/adsb_monitor/count/config"
+#  * publishNullTracksCountDiscoveryMsg:  "homeassistant/sensor/adsb_monitor/count/config"
+#  * publishTracksCountUpdateMsg:         "adsb/monitor/count"
 #
-#### TODO make a library function that acts as a framework for options
 
 import argparse
 from datetime import datetime
@@ -41,6 +43,9 @@ ADSB_MON_VERSION_PATCH = 0
 ADSB_MON_VERSION = f"{ADSB_MON_VERSION_MAJOR}.{ADSB_MON_VERSION_MINOR}.{ADSB_MON_VERSION_PATCH}"
 
 TRACK_STALE_TIME = (60 * 5)  # consider a track stale if no updates in 5mins
+GC_RUN_INTERVAL = (60 * 1)   # run the garbage collector every 1mins
+
+TRACKS_COUNT_INTERVAL = (60 * 1)  # update the number of tracked vehicles detected every 1mins
 
 AIRCRAFT_JSON_FILE = "aircraft.json"
 
@@ -109,6 +114,7 @@ class ExitGracefully:
                 logging.info(f"unknown signal: {sig}")
 
 
+# Service discovery and state update
 def publishServiceDiscoveryMsg():
     topic = "homeassistant/binary_sensor/adsb_monitor/status/config"
     msg = {
@@ -140,7 +146,8 @@ def publishServiceStateMsg(online):
     mqttClient.publishJson(topic, msg)
 
 
-def publishDiscoveryMsg(hexId):
+# Track discovery, null discovery, and update
+def publishTrackDiscoveryMsg(hexId):
     topic = f"homeassistant/sensor/adsb_{hexId}/config"
     msg = {
         "name": f"ADS-B Flight {hexId}",
@@ -163,14 +170,50 @@ def publishDiscoveryMsg(hexId):
     mqttClient.publishJson(topic, msg, retain=True)
 
 
-def publishNullDiscoveryMsg(hexId):
+def publishNullTrackDiscoveryMsg(hexId):
     topic = f"homeassistant/sensor/adsb_{hexId}/config"
     mqttClient.publishJson(topic, "", retain=True)
 
 
-def publishUpdateMsg(hexId, message):
+def publishTrackUpdateMsg(hexId, message):
     topic = f"adsb/vehicles/{hexId}/state"
     mqttClient.publishJson(topic, message)
+
+
+# Tracks count discovery, null discovery, and update
+def publishTracksCountDiscoveryMsg():
+    topic = "homeassistant/sensor/adsb_monitor/count/config"
+    msg = {
+        "name": "ADS-B Monitor vehicles count",
+        "state_topic": "adsb/monitor/count",
+        "unique_id": "adsb_monitor_count",
+        "unit_of_measurement": "vehicles",
+        "device_class": None,
+        "state_class": "measurement",
+        "device": {
+            "identifiers": ["adsb_monitor"],
+            "name": "ADS-B Receiver",
+            "manufacturer": "Raspberry Pi 4B",
+            "model": "FlightAware USB",
+            "sw_version": "bookworm"
+        },
+        "origin": {
+            "name": "adsbmon.py",
+            "sw": f"{ADSB_MON_VERSION_MAJOR}.{ADSB_MON_VERSION_MINOR}"
+        }
+    }
+    mqttClient.publishJson(topic, msg, retain=True)
+
+
+def publishNullTracksCountDiscoveryMsg(hexId):
+    topic = "homeassistant/sensor/adsb_monitor/count/config"
+    mqttClient.publishJson(topic, "", retain=True)
+
+
+def publishTracksCountUpdateMsg():
+    topic = "adsb/monitor/count"
+    msg = len(tracks)
+    mqttClient.publishJson(topic, msg)
 
 
 def processMsg(hexId, message, rxTime):
@@ -178,21 +221,21 @@ def processMsg(hexId, message, rxTime):
         tracks[hexId].update(message, rxTime)
         logging.debug(f"Updated track: {hexId}")
     else:
-        publishDiscoveryMsg(hexId)
+        publishTrackDiscoveryMsg(hexId)
         logging.debug(f"Published discovery message for {hexId}")
         newTrack = Track(message, rxTime)
         with lock:
             tracks[hexId] = newTrack
         logging.debug(f"Created and updated new track: {hexId}")
-    publishUpdateMsg(hexId, message)
+    publishTrackUpdateMsg(hexId, message)
     logging.debug(f"Published update message for {hexId}")
 
 
-def cleanUpStaleTracks():
+def trackGC():
     now = time.time()
     staleTracks = [v for k, v in tracks.items() if now - v > TRACK_STALE_TIME]
     for t in staleTracks:
-        publishNullDiscoveryMsg(t.getHexId())
+        publishNullTrackDiscoveryMsg(t.getHexId())
 
 
 def printTracks():
@@ -321,6 +364,7 @@ def run(options, killer):
         sys.exit(1)
 
     publishServiceDiscoveryMsg()
+    publishTracksCountDiscoveryMsg()
 
     if options['readHistory']:
         historyFiles = sorted(dumpDir.glob("history_*.json"),
@@ -347,15 +391,29 @@ def run(options, killer):
     observer.schedule(handler, path=str(aircraftJsonPath), recursive=False)
     observer.start()
     logging.debug(f"Watching {str(aircraftJsonPath)}...")
+
+    gcTimer = threading.Timer(GC_RUN_INTERVAL, trackGC)
+    gcTimer.daemon = True
+    gcTimer.start()
+    logging.debug(f"Running Garbage Collector every {GC_RUN_INTERVAL}secs")
+
+    tracksCntTimer = threading.Timer(TRACKS_COUNT_INTERVAL, publishTracksCountUpdateMsg)
+    tracksCntTimer.daemon = True
+    tracksCntTimer.start()
+    logging.debug(f"Running Vehicle Tracks count updater every {TRACKS_COUNT_INTERVAL}secs")
+
     try:
         while observer.is_alive() and not stopEvent.is_set():
             if stopEvent.wait(1.0):  # 1s poll + check signal
                 break
     finally:
         observer.stop()
-        observer.join()
+        gcTimer.cancel()
+        tracksCntTimer.cancel()
         logging.debug("Shutdown complete")
+    observer.join()
 
+    publishNullTracksCountDiscoveryMsg()
     publishServiceStateMsg(False)
     logging.info("sent Service state False @ {datetime.fromtimestamp(time.time())}")
     time.sleep(0.6)  # allow mqtt message to be sent
