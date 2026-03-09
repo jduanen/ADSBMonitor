@@ -235,6 +235,8 @@ def trackGC():
     now = time.time()
     staleTracks = [v for k, v in tracks.items() if now - v > TRACK_STALE_TIME]
     for t in staleTracks:
+        with lock:
+            del tracks[t.getHexId()]
         publishNullTrackDiscoveryMsg(t.getHexId())
 
 
