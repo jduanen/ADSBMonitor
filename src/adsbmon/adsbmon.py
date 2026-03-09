@@ -9,6 +9,7 @@
 #  * publishServiceDiscoveryMsg: "homeassistant/binary_sensor/adsb_monitor/status/config"
 #  * publishServiceStateMsg: "adsb/monitor/status"
 #  * publishDiscoveryMsg: f"homeassistant/sensor/adsb_{message['hex']}/config"
+#  * publishNullDiscoveryMsg: f"homeassistant/sensor/adsb_{message['hex']}/config"
 #  * publishUpdateMsg: f"adsb/vehicles/{message['hex']}/state"
 #
 #### TODO make a library function that acts as a framework for options
@@ -39,6 +40,8 @@ ADSB_MON_VERSION_MINOR = 1
 ADSB_MON_VERSION_PATCH = 0
 ADSB_MON_VERSION = f"{ADSB_MON_VERSION_MAJOR}.{ADSB_MON_VERSION_MINOR}.{ADSB_MON_VERSION_PATCH}"
 
+TRACK_STALE_TIME = (60 * 5)  # consider a track stale if no updates in 5mins
+
 AIRCRAFT_JSON_FILE = "aircraft.json"
 
 MQTT_CLIENT_ID = "adsb_vehicles"
@@ -59,6 +62,8 @@ tracks = {}
 
 stopEvent = threading.Event()
 
+lock = threading.Lock
+
 mqttClient = None
 
 
@@ -77,7 +82,7 @@ class JsonHandler(FileSystemEventHandler):
             logging.info(f"aircraft.json updated @ {datetime.fromtimestamp(time.time())}; now={ts}; {len(data['aircraft'])} msgs")
             #### TODO put data integrity checks here -- data.now, data.messages, data.aircraft[]
             for msg in data['aircraft']:
-                processMsg(msg, data['now'])
+                processMsg(msg['hex'], msg, data['now'])
         except Exception as e:
             logging.error(f"Failed to read {self.filepath}: {e}")
 
@@ -132,20 +137,19 @@ def publishServiceDiscoveryMsg():
 def publishServiceStateMsg(online):
     topic = "adsb/monitor/status"
     msg = "online" if online else "offline"
-    print(f"MMMM: {msg}")
     mqttClient.publishJson(topic, msg)
 
 
-def publishDiscoveryMsg(message, timestamp):
-    topic = f"homeassistant/sensor/adsb_{message['hex']}/config"
+def publishDiscoveryMsg(hexId):
+    topic = f"homeassistant/sensor/adsb_{hexId}/config"
     msg = {
-        "name": f"ADS-B Flight {message['hex']}",
-        "unique_id": f"{message['hex']}",
-        "state_topic": f"adsb/vehicles/{message['hex']}/state",
+        "name": f"ADS-B Flight {hexId}",
+        "unique_id": f"{hexId}",
+        "state_topic": f"adsb/vehicles/{hexId}/state",
         "unit_of_measurement": "vehicles",
         "device": {
-            "identifiers": [f"adsb_vehicle_{message['hex']}"],
-            "name": f"Vehicle {message['hex']}",
+            "identifiers": [f"adsb_vehicle_{hexId}"],
+            "name": f"Vehicle {hexId}",
         },
         "json_attributes_topic": f"adsb/vehicles/state",
         "value_template": "{{ value_json.icao24 }}",
@@ -159,22 +163,36 @@ def publishDiscoveryMsg(message, timestamp):
     mqttClient.publishJson(topic, msg, retain=True)
 
 
-def publishUpdateMsg(message, timestamp):
-    topic = f"adsb/vehicles/{message['hex']}/state"
+def publishNullDiscoveryMsg(hexId):
+    topic = f"homeassistant/sensor/adsb_{hexId}/config"
+    mqttClient.publishJson(topic, "", retain=True)
+
+
+def publishUpdateMsg(hexId, message):
+    topic = f"adsb/vehicles/{hexId}/state"
     mqttClient.publishJson(topic, message)
 
 
-def processMsg(message, rxTime):
-    if message['hex'] in tracks:
-        tracks[message['hex']].update(message, rxTime)
-        logging.debug(f"Updated track: {message['hex']}")
+def processMsg(hexId, message, rxTime):
+    if hexId in tracks:
+        tracks[hexId].update(message, rxTime)
+        logging.debug(f"Updated track: {hexId}")
     else:
-        publishDiscoveryMsg(message, rxTime)
-        logging.debug(f"Published discovery message for {message['hex']}")
-        tracks[message['hex']] = Track(message, rxTime)
-        logging.debug(f"Created and updated new track: {message['hex']}")
-    publishUpdateMsg(message, rxTime)
-    logging.debug(f"Published update message for {message['hex']}")
+        publishDiscoveryMsg(hexId)
+        logging.debug(f"Published discovery message for {hexId}")
+        newTrack = Track(message, rxTime)
+        with lock:
+            tracks[hexId] = newTrack
+        logging.debug(f"Created and updated new track: {hexId}")
+    publishUpdateMsg(hexId, message)
+    logging.debug(f"Published update message for {hexId}")
+
+
+def cleanUpStaleTracks():
+    now = time.time()
+    staleTracks = [v for k, v in tracks.items() if now - v > TRACK_STALE_TIME]
+    for t in staleTracks:
+        publishNullDiscoveryMsg(t.getHexId())
 
 
 def printTracks():
@@ -314,7 +332,7 @@ def run(options, killer):
                 logging.info(f"read history file {path.name}; now={ts}; {len(data['aircraft'])} msgs")
                 #### TODO put data integrity checks here -- data.now, data.messages, data.aircraft[]
                 for msg in data['aircraft']:
-                    processMsg(msg, data['now'])
+                    processMsg(msg['hex'], msg, data['now'])
             except json.JSONDecodeError:
                 logging.warning(f"Invalid JSON in: {path}")
             except UnicodeDecodeError:
