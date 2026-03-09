@@ -4,7 +4,13 @@
 #  visible crafts, and emits MQTT messages that contain track updates.
 #
 # N.B. options precedence order: cmd line -> conf file -> defaults
-
+#
+# MQTT publish topics:
+#  * publishServiceDiscoveryMsg: "homeassistant/binary_sensor/adsb_monitor/status/config"
+#  * publishServiceStateMsg: "adsb/monitor/status"
+#  * publishDiscoveryMsg: f"homeassistant/sensor/adsb_{message['hex']}/config"
+#  * publishUpdateMsg: f"adsb/vehicles/{message['hex']}/state"
+#
 #### TODO make a library function that acts as a framework for options
 
 import argparse
@@ -55,6 +61,8 @@ stopEvent = threading.Event()
 
 mqttClient = None
 
+once = True  #### TMP TMP TMP
+
 
 class JsonHandler(FileSystemEventHandler):
     def __init__(self, filepath):
@@ -98,12 +106,44 @@ class ExitGracefully:
                 logging.info(f"unknown signal: {sig}")
 
 
+def publishServiceDiscoveryMsg():
+    topic = "homeassistant/binary_sensor/adsb_monitor/status/config"
+    msg = {
+        "name": "ADS-B Monitor",
+        "device_class": "connectivity",
+        "state_topic": "adsb/monitor/status",
+        "payload_on": "online",
+        "payload_off": "offline",
+        "unique_id": "adsb_monitor_status",
+        "device": {
+            "identifiers": ["adsb_monitor"],
+            "name": "ADS-B Receiver",
+            "manufacturer": "Raspberry Pi 4B",
+            "model": "FlightAware USB",
+            "sw_version": "bookworm"
+
+        },
+        "origin": {
+            "name": "adsbmon.py",
+            "sw": f"{ADSB_MON_VERSION_MAJOR}.{ADSB_MON_VERSION_MINOR}"
+        }
+    }
+    mqttClient.publishJson(topic, msg, retain=True)
+
+
+def publishServiceStateMsg(online):
+    topic = "adsb/monitor/status"
+    msg = "online" if online else "offline"
+    print(f"MMMM: {msg}")
+    mqttClient.publishJson(topic, msg)
+
+
 def publishDiscoveryMsg(message, timestamp):
     topic = f"homeassistant/sensor/adsb_{message['hex']}/config"
     msg = {
         "name": f"ADS-B Flight {message['hex']}",
         "unique_id": f"{message['hex']}",
-        "state_topic": f"adsb/planes/{message['hex']}/state",
+        "state_topic": f"adsb/vehicles/{message['hex']}/state",
         "unit_of_measurement": "vehicles",
         "device": {
             "identifiers": [f"adsb_vehicle_{message['hex']}"],
@@ -114,22 +154,25 @@ def publishDiscoveryMsg(message, timestamp):
         "device_class": None,
         "state_class": None,
         "origin": {
-            "name": "ADS-B Receiver",
-            "sw": 1.0
+            "name": "adsbmon.py",
+            "sw": f"{ADSB_MON_VERSION_MAJOR}.{ADSB_MON_VERSION_MINOR}"
         }
     }
     mqttClient.publishJson(topic, msg, retain=True)
 
 
 def publishUpdateMsg(message, timestamp):
-    topic = f"adsb/planes/{message['hex']}/state"
+    topic = f"adsb/vehicles/{message['hex']}/state"
     mqttClient.publishJson(topic, message)
 
 
 def processMsg(message, rxTime):
-    if message['hex'] in tracks:
+    global once  #### TMP TMP TMP
+#    if message['hex'] in tracks:
+    if message['hex'] in tracks and once:  #### TMP TMP TMP
         tracks[message['hex']].update(message, rxTime)
         logging.debug(f"Updated track: {message['hex']}")
+        once = False
     else:
         publishDiscoveryMsg(message, rxTime)
         logging.debug(f"Published discovery message for {message['hex']}")
@@ -264,6 +307,8 @@ def run(options, killer):
     if not mqttClient:
         sys.exit(1)
 
+    publishServiceDiscoveryMsg()
+
     if options['readHistory']:
         historyFiles = sorted(dumpDir.glob("history_*.json"),
                               key=lambda p: p.stat().st_mtime)
@@ -280,6 +325,9 @@ def run(options, killer):
             except UnicodeDecodeError:
                 logging.warning(f"Can't read: {path}")
 
+    publishServiceStateMsg(True)
+    logging.info(f"sent Service state True @ {datetime.fromtimestamp(time.time())}")
+
     observer = PollingObserver()
     aircraftJsonPath = dumpDir / AIRCRAFT_JSON_FILE
     handler = JsonHandler(str(aircraftJsonPath))
@@ -294,6 +342,10 @@ def run(options, killer):
         observer.stop()
         observer.join()
         logging.debug("Shutdown complete")
+
+    publishServiceStateMsg(False)
+    logging.info("sent Service state False @ {datetime.fromtimestamp(time.time())}")
+    time.sleep(0.6)  # allow mqtt message to be sent
 
     if opts['verbose'] > 2:
         printTracks()
