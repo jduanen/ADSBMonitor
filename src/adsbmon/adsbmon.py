@@ -78,13 +78,13 @@ class JsonHandler(FileSystemEventHandler):
         self.filePath = filePath
 
     def on_any_event(self, event):
-        if event.src_path.endswith('aircraft.json') and event.is_directory is False:
+        if event.src_path.endswith(AIRCRAFT_JSON_FILE) and event.is_directory is False:
             self.readJson()
 
     def readJson(self):
         try:
-            with open(self.filePath, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+            text = self.filePath.read_text(encoding='utf-8')
+            data = json.loads(text)
             ts = datetime.fromtimestamp(data['now'])
             logging.info(f"aircraft.json updated @ {datetime.fromtimestamp(time.time())}; data['now']={ts}; # msgs: {len(data['aircraft'])}")
             #### TODO put data integrity checks here -- data.now, data.messages, data.aircraft[]
@@ -410,7 +410,7 @@ def run(options):
 
     observer = PollingObserver()
     aircraftJsonPath = dumpDir / AIRCRAFT_JSON_FILE
-    handler = JsonHandler(str(aircraftJsonPath))
+    handler = JsonHandler(aircraftJsonPath)
     observer.schedule(handler, path=str(aircraftJsonPath), recursive=False)
     observer.start()
     logging.debug(f"Watching {str(aircraftJsonPath)}...")
