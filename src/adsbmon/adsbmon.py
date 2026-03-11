@@ -74,24 +74,25 @@ mqttClient = None
 
 
 class JsonHandler(FileSystemEventHandler):
-    def __init__(self, filepath):
-        self.filepath = Path(filepath)
+    def __init__(self, filePath):
+        self.filePath = filePath
 
     def on_any_event(self, event):
         if event.src_path.endswith('aircraft.json') and event.is_directory is False:
-            self.read_json()
+            self.readJson()
 
-    def read_json(self):
+    def readJson(self):
         try:
-            data = json.loads(self.filepath.read_text('utf-8'))
+            with open(self.filePath, 'r', encoding='utf-8') as f:
+                data = json.load(f)
             ts = datetime.fromtimestamp(data['now'])
-            logging.info(f"aircraft.json updated @ {datetime.fromtimestamp(time.time())}; now={ts}; {len(data['aircraft'])} msgs")
+            logging.info(f"aircraft.json updated @ {datetime.fromtimestamp(time.time())}; data['now']={ts}; # msgs: {len(data['aircraft'])}")
             #### TODO put data integrity checks here -- data.now, data.messages, data.aircraft[]
             for msg in data['aircraft']:
-                processMsg(msg['hex'], msg, data['now'])  #### TMP TMP TMP
+                processMsg(msg['hex'], msg, data['now'])
 #                logging.debug(f"Skipped publishing update message for {msg['hex']}")  #### TMP TMP TMP
         except Exception as e:
-            logging.error(f"Failed to read {self.filepath}: {e}")
+            logging.error(f"Failed to read {self.filePath}: {e}")
 
 
 class ExitGracefully:
@@ -223,13 +224,13 @@ def processMsg(hexId, message, rxTime):
         tracks[hexId].update(message, rxTime)
         logging.debug(f"Updated track: {hexId}")
     else:
-        publishTrackDiscoveryMsg(hexId)
+#        publishTrackDiscoveryMsg(hexId)  TMP TMP TMP
         logging.debug(f"Published discovery message for {hexId}")
         newTrack = Track(message, rxTime)
         with lock:
             tracks[hexId] = newTrack
         logging.debug(f"Created and updated new track: {hexId}")
-    publishTrackUpdateMsg(hexId, message)
+#    publishTrackUpdateMsg(hexId, message)  TMP TMP TMP
     logging.debug(f"Published update message for {hexId}")
 
 
