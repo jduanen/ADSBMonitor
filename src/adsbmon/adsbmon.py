@@ -68,7 +68,7 @@ tracks = {}
 
 stopEvent = None
 
-lock = threading.Lock
+lock = threading.Lock()
 
 mqttClient = None
 
