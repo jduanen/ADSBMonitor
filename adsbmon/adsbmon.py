@@ -236,7 +236,7 @@ def processMsg(hexId, message, rxTime):
             tracks[hexId] = newTrack
         logging.debug(f"Created and updated new track: {hexId}")
     if not debug:
-        publishTrackUpdateMsg(hexId, message)  TMP TMP TMP
+        publishTrackUpdateMsg(hexId, message)
         logging.debug(f"Published update message for {hexId}")
     else:
         logging.debug(f"Skipped publishing Track update message for {hexId}")
