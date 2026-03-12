@@ -46,8 +46,6 @@ TRACK_STALE_TIME = (60 * 3)  # consider a track stale if no updates in 3mins
 
 GC_RUN_INTERVAL = (60 * 1)   # run the garbage collector every 1mins
 
-TRACKS_COUNT_INTERVAL = (60 * 1)  # update the number of tracked vehicles detected every 1mins
-
 AIRCRAFT_JSON_FILE = "aircraft.json"
 
 MQTT_CLIENT_ID = "adsb_vehicles"
@@ -72,6 +70,8 @@ lock = threading.Lock()
 
 mqttClient = None
 
+debug = False
+
 
 class JsonHandler(FileSystemEventHandler):
     def __init__(self, filePath):
@@ -82,6 +82,9 @@ class JsonHandler(FileSystemEventHandler):
             self.readJson()
 
     def readJson(self):
+        numTracks = len(tracks)
+        publishTracksCountUpdateMsg(numTracks)
+        logging.debug(f"Updated tracks count: {numTracks}")
         try:
             text = self.filePath.read_text(encoding='utf-8')
             data = json.loads(text)
@@ -90,7 +93,6 @@ class JsonHandler(FileSystemEventHandler):
             #### TODO put data integrity checks here -- data.now, data.messages, data.aircraft[]
             for msg in data['aircraft']:
                 processMsg(msg['hex'], msg, data['now'])
-#                logging.debug(f"Skipped publishing update message for {msg['hex']}")  #### TMP TMP TMP
         except Exception as e:
             logging.error(f"Failed to read {self.filePath}: {e}")
 
@@ -224,14 +226,20 @@ def processMsg(hexId, message, rxTime):
         tracks[hexId].update(message, rxTime)
         logging.debug(f"Updated track: {hexId}")
     else:
-#        publishTrackDiscoveryMsg(hexId)  TMP TMP TMP
-        logging.debug(f"Published discovery message for {hexId}")
+        if not debug:
+            publishTrackDiscoveryMsg(hexId)
+            logging.debug(f"Published discovery message for {hexId}")
+        else:
+            logging.debug(f"Skipped publishing Track discovery message for {hexId}")
         newTrack = Track(message, rxTime)
         with lock:
             tracks[hexId] = newTrack
         logging.debug(f"Created and updated new track: {hexId}")
-#    publishTrackUpdateMsg(hexId, message)  TMP TMP TMP
-    logging.debug(f"Published update message for {hexId}")
+    if not debug:
+        publishTrackUpdateMsg(hexId, message)  TMP TMP TMP
+        logging.debug(f"Published update message for {hexId}")
+    else:
+        logging.debug(f"Skipped publishing Track update message for {hexId}")
 
 
 def tracksGCLoop():
@@ -247,14 +255,6 @@ def tracksGCLoop():
             logging.debug(f"Deleted state track: {t.getHexId}")
         stopEvent.wait(GC_RUN_INTERVAL)
     logging.debug("tracksGCLoop exited")
-
-def tracksCountLoop():
-    while not stopEvent.is_set():
-        numTracks = len(tracks)
-        publishTracksCountUpdateMsg(numTracks)
-        logging.debug(f"Updated tracks count: {numTracks}")
-        stopEvent.wait(TRACKS_COUNT_INTERVAL)
-    logging.debug("tracksCountLoop exited")
 
 
 def printTracks():
@@ -280,6 +280,8 @@ if args.config:
 '''
 
 def getOpts():
+    global debug
+
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "-b", "--mqttHost", action="store", type=str,
@@ -287,6 +289,9 @@ def getOpts():
     ap.add_argument(
         "-c", "--configFilePath", action="store", type=str,
         help="Path to the configuration YAML file")
+    ap.add_argument(
+        "-d", "--debug", action="store_true", default=False,
+        help="Suppress publishing of track messages")
     ap.add_argument(
         "-k", "--mqttKeepalive", action="store", type=int,
         help="MQTT connection keep alive time (secs)")
@@ -359,6 +364,8 @@ def getOpts():
         logging.error("Must specify the path to where dump1090-fa stores its files")
         sys.exit(1)
 
+    debug = c['debug']
+
     return c
 
 
@@ -420,10 +427,6 @@ def run(options):
     gcThread.start()
     logging.debug(f"Running Garbage Collector every {GC_RUN_INTERVAL}secs")
 
-    tracksCntThread = threading.Thread(target=tracksCountLoop, daemon=True)
-    tracksCntThread.start()
-    logging.debug(f"Running Vehicle Tracks count updater every {TRACKS_COUNT_INTERVAL}secs")
-
     try:
         while observer.is_alive() and not stopEvent.is_set():
             if stopEvent.wait(1.0):  # 1s poll + check signal
@@ -433,7 +436,7 @@ def run(options):
         observer.join()
     logging.debug("Observer exited")
 
-    publishTracksCountUpdateMsg(-1)
+    publishTracksCountUpdateMsg(0)
     publishServiceStateMsg(False)
     logging.info("sent Service state False @ {datetime.fromtimestamp(time.time())}")
     time.sleep(0.6)  # allow mqtt message to be sent
