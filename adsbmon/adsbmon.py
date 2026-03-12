@@ -42,7 +42,7 @@ ADSB_MON_VERSION_MINOR = 1
 ADSB_MON_VERSION_PATCH = 0
 ADSB_MON_VERSION = f"{ADSB_MON_VERSION_MAJOR}.{ADSB_MON_VERSION_MINOR}.{ADSB_MON_VERSION_PATCH}"
 
-TRACK_STALE_TIME = (60 * 5)  # consider a track stale if no updates in 5mins
+TRACK_STALE_TIME = (60 * 3)  # consider a track stale if no updates in 3mins
 
 GC_RUN_INTERVAL = (60 * 1)   # run the garbage collector every 1mins
 
@@ -146,7 +146,7 @@ def publishServiceDiscoveryMsg():
 def publishServiceStateMsg(online):
     topic = "adsb/monitor/status"
     msg = "online" if online else "offline"
-    mqttClient.publishJson(topic, msg)
+    mqttClient.publishJson(topic, msg, retain=True)
 
 
 # Track discovery, null discovery, and update
@@ -216,7 +216,7 @@ def publishNullTracksCountDiscoveryMsg():
 def publishTracksCountUpdateMsg(numTracks):
     topic = "adsb/monitor/count"
     msg = numTracks
-    mqttClient.publishJson(topic, msg)
+    mqttClient.publishJson(topic, msg, retain=True)
 
 
 def processMsg(hexId, message, rxTime):
@@ -238,7 +238,7 @@ def tracksGCLoop():
     while not stopEvent.is_set():
         now = time.time()
         logging.info(f"Garbage collect stale tracks @ {now}")
-        staleTracks = [v for k, v in tracks.items() if now - v > TRACK_STALE_TIME]
+        staleTracks = [v for k, v in tracks.items() if now - v.getUpdateTime() > TRACK_STALE_TIME]
         logging.debug(f"Number of stale tracks: {len(staleTracks)}")
         for t in staleTracks:
             publishNullTrackDiscoveryMsg(t.getHexId())
@@ -433,7 +433,7 @@ def run(options):
         observer.join()
     logging.debug("Observer exited")
 
-    publishNullTracksCountDiscoveryMsg()
+    publishTracksCountUpdateMsg(-1)
     publishServiceStateMsg(False)
     logging.info("sent Service state False @ {datetime.fromtimestamp(time.time())}")
     time.sleep(0.6)  # allow mqtt message to be sent
