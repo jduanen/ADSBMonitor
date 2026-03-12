@@ -4,16 +4,21 @@ Tool for logging and analyzing ADS-B data
 **WIP**
 
 ## Hardware
-* Raspberry Pi 4B
-* Flight Aware SDR USB dongle
-* ???? SDR USB dongle
+* Raspberry Pi 4B (1GB DRAM, Trixie)
+* Flight Aware SDR USB dongle (RTL2832U, R820T)
+* Nano Three (n3) SDR USB dongle (RTL2838, R820T)
 * ???? splitter
 * ???? dual band (1090MHz and 978MHz) ?db antenna
 
 ## Software
-* dump1090-fa: ?
-* dump978-fa: ?
-* readsb: ?
+* readsb: decodes 1090MHz ADS-B, provides API
+  - interfaces directly to the Flight Aware dongle (s/n: 00001090)
+  - http://adsbmon.lan:8504: real-time map
+  - http://adsbmon.lan/tar1090: real-time map
+  - http://adsbmon.lan:8042/?<arg>: API
+* dump978-fa: decodes 978MHz UAT
+  - interfaces directly to the Nano Three dongle (s/n: 00000978)
+  - produces ????
 * adsbmon.py: ?
 
 ## TODO
@@ -99,119 +104,78 @@ sudo reboot
 ### SW Install
 
 #### Trixie
-* use debian13 until the dump1090-fa repo has a version for trixie
-* temporarily add repo to apt sources
-'''
-sudo wget -O /etc/apt/sources.list.d/abcd567a.list https://abcd567a.github.io/debian13/abcd567a.list
-sudo wget -O /etc/apt/keyrings/abcd567a-key.gpg https://abcd567a.github.io/debian13/KEY2.gpg
-sudo apt update
-'''
-* install packages
-'''
-sudo apt install piaware
-sudo apt install dump1090-fa 
-sudo apt install piaware-web
-sudo apt install dump978-fa
-sudo piaware-config uat-receiver-type sdr 
-'''
-* install readsb (to write '/run/readsb/aircraft.json')
+* set up python3 and the venv for adsbmon.py
+  - 'sudo apt update && sudo apt install python3-full python3-pip python3-venv'
+  - 'python3 -m venv myenv'
+  - 'source ./myenv/bin/activate'
+  - pip install -r requirements.txt
+* install readsb (better than dump1090-fa for my purposes)
 '''
 sudo bash -c "$(wget -nv -O - https://github.com/wiedehopf/adsb-scripts/raw/master/readsb-install.sh)"
 sudo reboot
 '''
-  - configure by editing '/etc/default/readsb'
-    * RECEIVER_OPTIONS
-      - --lat=37.4599669
-      - --lon=-122.1652244
-    * DECODER_OPTIONS
-      - --max-range=64
-    * NET_OPTION
-      - --net-api-port 8042
-  - alternatively, set location with: 'sudo readsb-set-location 37.4599669 -122.1652244'
-* remove repo when official dump1090-fa is released for Trixie
-'''
-sudo rm /etc/apt/sources.list.d/abcd567a.list
-sudo apt update
-'''
+* install dump978-fa
+  - 'sudo apt update && sudo apt install dump978-fa'
+* build and install uat2esnt
+  - 'git clone https://github.com/mutability/dump978'
+  - 'cd dump978'
+  - 'make'  # builds uat2esnt
+  - 'sudo cp uat2esnt /usr/local/bin'
 
 ### Configure Applications
 
-#### dump1090-fa
+Edit config files, restart all the services, and check if they're running correctly.
 
-* configure the service
-  - edit (as root) '/etc/default/dump1090-fa'
-    * RECEIVER_LAT=37.4599669
-    * RECEIVER_LON=-122.1652244
-      - @37.4599669,-122.1652244,18.58
-    * MAX_RANGE=48  # in NM
-    * JSON_LOCATION_ACCURACY=2
+Check status of all services:
+'sudo systemctl status readsb tar1090 dump978-fa skyaware978'
 
-????
-    * envvars used by start script
-      - RECEIVER_OPTIONS="--device-index 00001090 --gain -10 --ppm 0"
-        * gain=-10: means use AGC
-        * ppm=0: ????
-      - NET_OPTIONS="--net --net-http-port 8080 --net-ro-port 30002 --net-beast 30005"
-        * net: enable TCP output
-        * net-http-port: web/JSON listen port
-        * net-ro-port: raw output listen port
-        * net-beast: Beast-format output (used by other feeders)
-      - JSON_OPTIONS="--json-location-accuracy 2"
-        * json-location-accuracy: digits of precision
-      - DECODER_OPTIONS: rarely changed
+#### readsb: 1090 decoder and map and API server
+* configure by editing '/etc/default/readsb'
+  - add cli options
+    * RECEIVER_OPTIONS: --lat=37.4599669 --lon=-122.1652244
+    * NET_OPTION: --net-api-port 8042 --net-ro-size 500 --net-ro-interval 0.2 --net-connector localhost,30978,uat_in
+  - modify options
+    * RECEIVER_OPTIONS: --device 00001090
+    * DECODER_OPTIONS: --max-range=64
 
-* set up systemd
-  - create (as root) '/etc/systemd/system/dump1090-fa.service'
-'''
-[Unit]
-Description=dump1090-fa
-After=network.target
+#### dump978-fa: 978 decoder, feeds readsb
+* edit '/etc/default/dump978-fa'
+  - ENABLED=yes
+  - RECEIVER_OPTIONS="--sdr driver=rtlsdr,serial=00000978 --format CS8"
+  - NET_OPTIONS="--raw-port 30978 --json-port 30979"  # Raw UAT out on 30978
 
-[Service]
-ExecStart=/usr/bin/dump1090-fa --device-index 00001090 --net --quiet
-Restart=always
-User=jdn
-Group=plugdev
+#### tar1090: enhanced map, reads merged 1090 and 978 data from readsb
+* install
+  - 'sudo bash -c "$(wget -nv -O - https://github.com/wiedehopf/tar1090/raw/master/install.sh)"'
+* configure (to enable UAT978)
+  - 'sudo ex /etc/default/tar1090'
+    * ENABLE_978=yes
+  - 'sudo systemctl restart tar1090'
+* update
+  - sudo bash -c "$(wget -nv -O - https://github.com/wiedehopf/tar1090/raw/master/install.sh)"
+  - configuration should be preserved
 
-[Install]
-WantedBy=multi-user.target
-'''
-
-* enable the service
-'''
-sudo systemctl daemon-reload
-sudo systemctl enable --now dump1090-fa
-'''
-
-* tar1090: enhanced map
-  - https://github.com/wiedehopf/tar1090
-  - install
-    * sudo bash -c "$(wget -nv -O - https://github.com/wiedehopf/tar1090/raw/master/install.sh)"
-  - configure (to enable UAT978)
-    * 'sudo ex /etc/default/tar1090'
-    * 'sudo systemctl restart tar1090'
-  - update
-    * sudo bash -c "$(wget -nv -O - https://github.com/wiedehopf/tar1090/raw/master/install.sh)"
-    * configuration should be preserved
-
-#### dump978-fa
+#### adsbmon.py: MQTT interface to Home Assistant
+* create config yaml file and give it in the startup cli
+  --> will make a service of it when it's working
+* ????
 
 ## Operation
-
-* run tar1090
-  - 'http://adsbrx.lan/tar1090'
-  - 'http://adsbrx.lan/tar1090?pTracks'
-
-
-
-## Notes
-* dump1090-fa is the popular fork (https://github.com/flightaware/dump1090)
-  - it runs on bookworm, but has issues with python watchdog and json
-  - there are builds for trixie
-* Trixie installs
-  --> be prepared for dump1090-fa to make an official release for Trixie
-  - debian13: 
-    * https://github.com/abcd567a/debian13/tree/master
-    * https://github.com/abcd567a/debian13/blob/master/README.md
-* 
-
+* skyaware978 map
+  - http://adsbrx.lan:8504
+  - data from readsb
+* tar1090 map
+  - enhanced real-time map: 'http://adsbrx.lan/tar1090'
+  - ????: 'http://adsbrx.lan/tar1090?pTracks'
+  - data from readsb
+  - renders much faster, dark mode, multi-select, adjustable history
+  - combines readsb and dump978-fa
+* readsb API: lots of useful features
+  - <synopsis and pointer to docs>
+* adsbmon.py: my tool for interfacing to Home Assistant (and others) via MQTT messages
+  - ????: ./adsbmon.py -v -L INFO -c ./config.yaml /run/readsb/
+  - ????
+* ADS-B Exchange free map: https://globe.adsbexchange.com/
+  - fed by large number of receivers
+  - less censoring (for now)
+* <?tools?>
