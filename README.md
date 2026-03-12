@@ -121,6 +121,9 @@ sudo reboot
   - 'cd dump978'
   - 'make'  # builds uat2esnt
   - 'sudo cp uat2esnt /usr/local/bin'
+* get and install aircraftdb
+  - 'sudo wget -O /usr/local/share/tar1090/aircraft.csv.gz https://github.com/wiedehopf/tar1090-db/raw/csv/aircraft.csv.gz'
+  - add to '/etc/default/readsb': "--db-file /usr/local/share/tar1090/aircraft.csv.gz"
 
 ### Configure Applications
 
@@ -151,6 +154,16 @@ Check status of all services:
   - 'sudo ex /etc/default/tar1090'
     * ENABLE_978=yes
   - 'sudo systemctl restart tar1090'
+  - 'sudo ex /usr/local/share/tar1090/html/config.js'  ## save copy of original first
+    * autoselectCoords = [37.46, -122.17];
+    * MapDim = false;
+    * SiteCircles = true; // true to show circles (only shown if the center marker is shown)
+    * SiteCirclesDistances = new Array(2,4,8,16,32,64);
+    * <consider changing columns shown in table at startup>
+    * <route info>
+      - "https://adsb.im/api/0/routeset" -- "Not Allowed"
+      - "https://api.adsb.lol/api/0/routeset" -- "Not Allowed"
+        * "https://api.adsb.lol/docs" -- API docs
 * update
   - sudo bash -c "$(wget -nv -O - https://github.com/wiedehopf/tar1090/raw/master/install.sh)"
   - configuration should be preserved
