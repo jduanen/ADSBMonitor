@@ -23,5 +23,8 @@ class Track:
     def getHexId(self):
         return self.track['hex']
 
+    def getUpdateTime(self):
+        return self.track.get('updateTime', 0.0)
+
     def print(self):
         json.dump(self.track, sys.stdout, indent=4, sort_keys=True)
