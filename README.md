@@ -132,7 +132,7 @@ Check status of all services:
 #### readsb: 1090 decoder and map and API server
 * configure by editing '/etc/default/readsb'
   - add cli options
-    * RECEIVER_OPTIONS: --lat=37.4599669 --lon=-122.1652244
+    * RECEIVER_OPTIONS: --lat=<lat> --lon=<lon>
     * NET_OPTION: --net-api-port 8042 --net-ro-size 500 --net-ro-interval 0.2 --net-connector localhost,30978,uat_in
   - modify options
     * RECEIVER_OPTIONS: --device 00001090
