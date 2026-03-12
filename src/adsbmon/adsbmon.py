@@ -408,6 +408,7 @@ def run(options):
     publishServiceStateMsg(True)
     logging.info(f"sent Service state True @ {datetime.fromtimestamp(time.time())}")
 
+    #### TODO add check for file not changing in some amount of time and bail
     observer = PollingObserver()
     aircraftJsonPath = dumpDir / AIRCRAFT_JSON_FILE
     handler = JsonHandler(aircraftJsonPath)
