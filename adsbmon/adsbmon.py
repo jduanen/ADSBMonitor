@@ -77,7 +77,8 @@ class JsonHandler(FileSystemEventHandler):
     def __init__(self, filePath):
         self.filePath = filePath
 
-    def on_any_event(self, event):
+    def on_created(self, event):
+        logging.debug(f"Event: {event.event_type}, Path: {event.src_path}, Dir: {event.is_directory}")
         if event.src_path.endswith(AIRCRAFT_JSON_FILE) and event.is_directory is False:
             self.readJson()
 
