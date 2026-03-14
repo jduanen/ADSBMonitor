@@ -205,16 +205,13 @@ def run(options):
     logging.debug("Watching %s...", str(aircraftJsonPath))
     try:
         while observer.is_alive() and not stopEvent.is_set():
-            print("AAAAA")
             time.sleep(1.0)  # 1sec poll
             if time.time() - handler.lastChanged > FILE_UNCHANGED_TIMEOUT:
                 logging.error("No update of %s for %s secs",
                               aircraftJsonPath, FILE_UNCHANGED_TIMEOUT)
                 break
-            print("BBBBB")
             if stopEvent.wait(0.1):  # non-blocking check
                 break
-            print("CCCCC")
     finally:
         observer.stop()
         observer.join()
