@@ -53,8 +53,8 @@ class JsonHandler(FileSystemEventHandler):
         self.filePath = filePath
         self.lastChanged = time.time()
 
-    def on_any_event(self, event):
-        logging.debug("Event: %s, Path: %s, Dir: %s", event.event_type, event.src_path, event.is_directory)
+#    def on_any_event(self, event):
+#        logging.debug("Event: %s, Path: %s, Dir: %s", event.event_type, event.src_path, event.is_directory)
 
     def on_created(self, event):
         self.lastChanged = time.time()
