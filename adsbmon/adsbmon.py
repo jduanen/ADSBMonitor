@@ -42,7 +42,7 @@ ADSB_MON_VERSION_MINOR = 1
 ADSB_MON_VERSION_PATCH = 0
 ADSB_MON_VERSION = f"{ADSB_MON_VERSION_MAJOR}.{ADSB_MON_VERSION_MINOR}.{ADSB_MON_VERSION_PATCH}"
 
-TRACK_STALE_TIME = (60 * 3)  # consider a track stale if no updates in 3mins
+TRACK_STALE_TIME = 58  #### TMP TMP TMP(60 * 3)  # consider a track stale if no updates in 3mins
 
 GC_RUN_INTERVAL = (60 * 1)   # run the garbage collector every 1mins
 
@@ -90,7 +90,7 @@ class JsonHandler(FileSystemEventHandler):
             text = self.filePath.read_text(encoding='utf-8')
             data = json.loads(text)
             ts = datetime.fromtimestamp(data['now'])
-            logging.info(f"aircraft.json updated @ {datetime.fromtimestamp(time.time())}; data['now']={ts}; # msgs: {len(data['aircraft'])}")
+            logging.debug(f"aircraft.json updated @ {datetime.fromtimestamp(time.time())}; data['now']={ts}; # msgs: {len(data['aircraft'])}")
             #### TODO put data integrity checks here -- data.now, data.messages, data.aircraft[]
             for msg in data['aircraft']:
                 processMsg(msg['hex'], msg, data['now'])
@@ -248,7 +248,7 @@ def tracksGCLoop():
         now = time.time()
         logging.info(f"Garbage collect stale tracks @ {now}")
         staleTracks = [v for k, v in tracks.items() if now - v.getUpdateTime() > TRACK_STALE_TIME]
-        logging.debug(f"Number of stale tracks: {len(staleTracks)}")
+        logging.info(f"Number of stale tracks: {len(staleTracks)}; # total tracks: {len(tracks)}")
         for t in staleTracks:
             publishNullTrackDiscoveryMsg(t.getHexId())
             with lock:
