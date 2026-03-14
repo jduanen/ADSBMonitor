@@ -29,7 +29,7 @@ class ReceiverSite:
         }
         pprint(state, width=1, sort_dicts=False)
 
-    def _distanceNm(self, lat1, lon1, lat2, lon2):
+    def _distanceNM(self, lat1, lon1, lat2, lon2):
         """ Distance between two WGS84 coordinates in nautical miles.
             lat/lon is given in decimal degrees
         """
@@ -53,8 +53,8 @@ class ReceiverSite:
         d_nm = d_km / 1.852
         return d_nm
 
-    def distance2dNm(self, lat, lon):
+    def distance2dNM(self, lat, lon):
         return self._distanceNm(self.lat, self.lon, lat, lon)
 
-    def distance3d(self, lat, lon, alt):
+    def distance3dNM(self, lat, lon, alt):
         return None
