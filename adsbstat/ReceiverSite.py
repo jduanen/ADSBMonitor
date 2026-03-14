@@ -54,7 +54,7 @@ class ReceiverSite:
         return d_nm
 
     def distance2dNM(self, lat, lon):
-        return self._distanceNm(self.lat, self.lon, lat, lon)
+        return self._distanceNM(self.lat, self.lon, lat, lon)
 
     def distance3dNM(self, lat, lon, alt):
         return None
