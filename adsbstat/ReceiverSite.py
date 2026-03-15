@@ -57,4 +57,5 @@ class ReceiverSite:
         return self._distanceNM(self.lat, self.lon, lat, lon)
 
     def distance3dNM(self, lat, lon, alt):
-        return None
+        altNM = alt / 6076.115
+        return math.sqrt((self.distance2dNM(lat, lon) ** 2) + (altNM ** 2))
