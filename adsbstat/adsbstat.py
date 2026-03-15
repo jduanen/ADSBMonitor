@@ -91,7 +91,7 @@ class JsonHandler(FileSystemEventHandler):
                     # add additional fields to the message
                     msg['now'] = data['now']
                     msg['dist2d'] = distance
-                    msg['dist3d'] = self.rxSite.distance3dNM(msg['lat'], msg['lon'])
+                    msg['dist3d'] = self.rxSite.distance3dNM(msg['lat'], msg['lon'], msg['alt_geom'])
                     mappings = self.aircraftDB.getMappings(msg['hex'])
                     msg['tailNumber'] = mappings[1]
                     msg['aircraftType'] = mappings[2]
