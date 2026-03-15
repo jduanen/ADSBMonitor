@@ -24,7 +24,7 @@ from watchdog.events import FileSystemEventHandler
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from ReceiverSite import ReceiverSite
-from common import AircraftDB as AircraftDB
+from common.AircraftDB import AircraftDB
 
 import pdb  ## pdb.set_trace()
 
@@ -48,14 +48,12 @@ DEFAULTS = {
 
 stopEvent = None
 
-rxSite = None
-
-aircraftDB = None
-
 
 class JsonHandler(FileSystemEventHandler):
-    def __init__(self, filePath):
+    def __init__(self, filePath, aircraftDB, receiverSite):
         self.filePath = filePath
+        self.aircraftDB = aircraftDB
+        self.rxSite = receiverSite
         self.lastChanged = time.time()
 
     '''
@@ -72,17 +70,31 @@ class JsonHandler(FileSystemEventHandler):
         try:
             text = self.filePath.read_text(encoding='utf-8')
             data = json.loads(text)
-            ts = datetime.fromtimestamp(data['now'])
-            logging.debug("aircraft file updated @ %s; data['now']=%s; # msgs: %d",
-                          datetime.fromtimestamp(time.time()), ts, len(data['aircraft']))
-            #### TODO put data integrity checks here -- data.now, data.messages, data.aircraft[]
-            for msg in data['aircraft']:
-                if {'lat', 'lon'} <= msg.keys():
-                    logging.debug(f"distance: %f", rxSite.distance2dNM(msg['lat'], msg['lon']))
-                    if rxSite.distance2dNM(msg['lat'], msg['lon']) <= rxSite.max2dDistance:
-                        processMsg(msg['hex'], msg, data['now'])
+            if not data:
+                logging.error("No data read")
+                return
         except Exception as e:
-            logging.error("Failed to read %s: %s", self.filePath, e)
+            logging.error("Failed to read '%s': %s", self.filePath, e)
+        ts = datetime.fromtimestamp(data['now'])
+        logging.debug("aircraft file updated @ %s; data['now']=%s; # msgs: %d",
+                      datetime.fromtimestamp(time.time()), ts, len(data['aircraft']))
+        #### TODO put data integrity checks here -- data.now, data.messages, data.aircraft[]
+        for msg in data['aircraft']:
+            if {'lat', 'lon'} <= msg.keys():
+                distance = self.rxSite.distance2dNM(msg['lat'], msg['lon'])
+                logging.debug("distance: %f", distance)
+                if distance <= self.rxSite.max2dDistance:
+                    missingFields = {'alt_geom', 'category', 'gs', 'hex', 'rssi'} - msg.keys()
+                    if missingFields:
+                        logging.error("Message is missing fields: %s", missingFields)
+                        return
+                    # add additional fields to the message
+                    msg['now'] = data['now']
+                    mappings = self.aircraftDB.getMappings(msg['hex'])
+                    msg['tailNumber'] = mappings[1]
+                    msg['aircraftType'] = mappings[2]
+                    msg['aircraftCode'] = mappings[3]
+                    pprint(msg)  #### TMP TMP TMP
 
 
 class ExitGracefully:
@@ -106,18 +118,6 @@ class ExitGracefully:
             case _:
                 logging.info("unknown signal: %s", sig)
 
-
-def processMsg(hexId, message, rxTime):
-    print(f"XXXXX: {hexId}")  #### FIXME
-    missingFields = {'alt_geom', 'gs', 'category', 'rssi'} - message.keys()
-    if missingFields:
-        print(f"Missing fields: {missingFields}")
-        return
-    mappings = aircraftDB.getMappings(hexId)
-    message['tailNumber'] = mappings[1]
-    message['aircraftType'] = mappings[2]
-    message['aircraftCode'] = mappings[3]
-    pprint(message)
 
 
 def getOpts():
@@ -197,7 +197,7 @@ def getOpts():
 
 
 def run(options):
-    global stopEvent, rxSite, aircraftDB
+    global stopEvent
 
     stopEvent = threading.Event()
 
@@ -219,7 +219,7 @@ def run(options):
     #### TODO add check for file not changing in some amount of time and bail
     observer = PollingObserver()
     aircraftJsonPath = dumpDir / AIRCRAFT_JSON_FILE
-    handler = JsonHandler(aircraftJsonPath)
+    handler = JsonHandler(aircraftJsonPath, aircraftDB, rxSite)
     observer.schedule(handler, path=str(aircraftJsonPath), recursive=False)
     observer.start()
     logging.debug("Watching %s...", str(aircraftJsonPath))
