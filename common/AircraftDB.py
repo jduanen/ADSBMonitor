@@ -26,14 +26,18 @@ import csv
 
 class AircraftDB:
     def __init__(self, dbFilePath):
-        self.filePath = dbFilePath
-        self.db = {}
-        with open(self.filePath, 'r', encoding="utf-8") as f:
-            reader = csv.reader(f)
-            for row in reader:
-                if row:
-                    key = row[0]
-                    self.db[key] = row
+        try:
+            self.filePath = dbFilePath
+            self.db = {}
+            with open(self.filePath, 'r', encoding="utf-8") as f:
+                reader = csv.reader(f)
+                for row in reader:
+                    if row:
+                        key = row[0]
+                        self.db[key] = row
+        except Exception as e:
+            logging.error("Failed to load database CSV file '%s': %s", self.filePath, e)
+
 
     def getMappings(self, hexCode):
         return self.db.get(hexCode.upper(), None)
