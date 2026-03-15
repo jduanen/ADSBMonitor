@@ -70,9 +70,10 @@ class JsonHandler(FileSystemEventHandler):
                           datetime.fromtimestamp(time.time()), ts, len(data['aircraft']))
             #### TODO put data integrity checks here -- data.now, data.messages, data.aircraft[]
             for msg in data['aircraft']:
-                print(f">>>> {rxSite.distance2dNM(msg['lat'], msg['lon'])}")
-                if rxSite.distance2dNM(msg['lat'], msg['lon']) <= rxSite.max2dDistance:
-                    processMsg(msg['hex'], msg, data['now'])
+                if {'lat', 'lon'} <= msg.keys():
+                    logging.debug(f"distance: %f", rxSite.distance2dNM(msg['lat'], msg['lon']))
+                    if rxSite.distance2dNM(msg['lat'], msg['lon']) <= rxSite.max2dDistance:
+                        processMsg(msg['hex'], msg, data['now'])
         except Exception as e:
             logging.error("Failed to read %s: %s", self.filePath, e)
 
@@ -100,7 +101,10 @@ class ExitGracefully:
 
 
 def processMsg(hexId, message, rxTime):
-    print(hexId)  #### FIXME
+    print(f"XXXXX: {hexId}")  #### FIXME
+    missingFields = {'alt_geom', 'gs', 'category', 'rssi'} - message.keys()
+    if missingFields:
+        print(f"Missing fields: {missingFields}")
 
 
 def getOpts():
@@ -110,6 +114,9 @@ def getOpts():
     ap.add_argument(
         "-c", "--configFilePath", action="store", type=str,
         help="Path to the configuration YAML file")
+    ap.add_argument(
+        "-d", "--dbFilePath", action="store", type=str,
+        help="Path to the plane database")
     ap.add_argument(
         "-L", "--logLevel", action="store", type=str,
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
