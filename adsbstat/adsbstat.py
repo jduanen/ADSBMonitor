@@ -12,6 +12,7 @@ import json
 import logging
 import os
 from pathlib import Path
+from pprint import pprint
 import signal
 import sys
 import threading
@@ -21,7 +22,9 @@ import yaml
 from watchdog.observers.polling import PollingObserver
 from watchdog.events import FileSystemEventHandler
 
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from ReceiverSite import ReceiverSite
+from common import AircraftDB as AircraftDB
 
 import pdb  ## pdb.set_trace()
 
@@ -47,14 +50,18 @@ stopEvent = None
 
 rxSite = None
 
+aircraftDB = None
+
 
 class JsonHandler(FileSystemEventHandler):
     def __init__(self, filePath):
         self.filePath = filePath
         self.lastChanged = time.time()
 
-#    def on_any_event(self, event):
-#        logging.debug("Event: %s, Path: %s, Dir: %s", event.event_type, event.src_path, event.is_directory)
+    '''
+    def on_any_event(self, event):
+        logging.debug("Event: %s, Path: %s, Dir: %s", event.event_type, event.src_path, event.is_directory)
+    '''
 
     def on_created(self, event):
         self.lastChanged = time.time()
@@ -105,11 +112,15 @@ def processMsg(hexId, message, rxTime):
     missingFields = {'alt_geom', 'gs', 'category', 'rssi'} - message.keys()
     if missingFields:
         print(f"Missing fields: {missingFields}")
+        return
+    mappings = aircraftDB.getMappings(hexId)
+    message['tailNumber'] = mappings[1]
+    message['aircraftType'] = mappings[2]
+    message['aircraftCode'] = mappings[3]
+    pprint(message)
 
 
 def getOpts():
-    global debug
-
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "-c", "--configFilePath", action="store", type=str,
@@ -186,7 +197,7 @@ def getOpts():
 
 
 def run(options):
-    global stopEvent, rxSite
+    global stopEvent, rxSite, aircraftDB
 
     stopEvent = threading.Event()
 
@@ -194,6 +205,8 @@ def run(options):
 
     if options['verbose'] > 1:
         json.dump(options, sys.stdout, indent=4, sort_keys=True)
+
+    aircraftDB = AircraftDB(options['dbFilePath'])
 
     rxSite = ReceiverSite(options['name'], options['maxDistance'],
                           options['position'][0], options['position'][1],
