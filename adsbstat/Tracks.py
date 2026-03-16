@@ -14,10 +14,10 @@ class Tracks:
         self.stateTime = staleTime
         self.tracks = {}
 
-    def addMessage(msgTime, msg):
+    def addMessage(self, msgTime, msg):
         print("addMessage")  #### TBD
 
-    def garbageCollect():
+    def garbageCollect(self):
         print("GC")  #### TBD
 
     def print(self):
