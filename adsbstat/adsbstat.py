@@ -51,12 +51,13 @@ DEFAULTS = {
 stopEvent = None
 
 
-class JsonHandler(FileSystemEventHandler):
+class MsgHandler(FileSystemEventHandler):
     def __init__(self, filePath, aircraftDB, receiverSite):
         self.filePath = filePath
         self.aircraftDB = aircraftDB
         self.rxSite = receiverSite
         self.lastChanged = time.time()
+        self.records = {}
 
     '''
     def on_any_event(self, event):
@@ -90,10 +91,11 @@ class JsonHandler(FileSystemEventHandler):
                     missingKeys = requiredKeys  - msg.keys()
                     if missingKeys:
                         logging.error("Message is missing fields: %s", missingKeys)
-                        return
+                        continue
 
                     additionalKeys = {'baro_rate', 'emergency', 'flight', 'geom_rate', 'rssi', 'seen'}
-                    mappings = self.aircraftDB.getMappings(msg['hex'])
+                    hexId = msg['hex']
+                    mappings = self.aircraftDB.getMappings(hexId)
                     record = {
                         'acType': mappings[2],
                         'acCode': mappings[3],
@@ -107,7 +109,15 @@ class JsonHandler(FileSystemEventHandler):
                     if ADDITIONAL_FIELDS:
                         addedFields = {k: msg.get(k) for k in additionalKeys}
                         record.update(addedFields)
-                    print(record)  #### TMP TMP TMP
+
+                    if hexId in self.records:
+                        self.records[hexId].append(record)
+                    else:
+                        self.records[hexId] = [record]
+                    #### TMP TMP TMP
+                    for h, l in self.records.items():
+                        print("> {h}: {len(l)}")
+                    print("")
 
 class ExitGracefully:
     def __init__(self):
@@ -231,7 +241,7 @@ def run(options):
     #### TODO add check for file not changing in some amount of time and bail
     observer = PollingObserver()
     aircraftJsonPath = dumpDir / AIRCRAFT_JSON_FILE
-    handler = JsonHandler(aircraftJsonPath, aircraftDB, rxSite)
+    handler = MsgHandler(aircraftJsonPath, aircraftDB, rxSite)
     observer.schedule(handler, path=str(aircraftJsonPath), recursive=False)
     observer.start()
     logging.debug("Watching %s...", str(aircraftJsonPath))
