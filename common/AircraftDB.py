@@ -40,7 +40,7 @@ class AircraftDB:
 
 
     def getMappings(self, hexCode):
-        return self.db.get(hexCode.upper(), None)
+        return self.db.get(hexCode.upper(), ('', '', '', ''))
 
     def hexCodeToTailNumber(self, hexCode):
         tailNumber = None
