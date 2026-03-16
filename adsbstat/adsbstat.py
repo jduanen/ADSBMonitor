@@ -116,7 +116,7 @@ class MsgHandler(FileSystemEventHandler):
                         self.records[hexId] = [record]
                     #### TMP TMP TMP
                     for h, l in self.records.items():
-                        print("> {h}: {len(l)}")
+                        print(f"> {h}: {len(l)}")
                     print("")
 
 class ExitGracefully:
