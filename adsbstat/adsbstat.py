@@ -95,11 +95,12 @@ class JsonHandler(FileSystemEventHandler):
                     additionalKeys = {'baro_rate', 'emergency', 'flight', 'geom_rate', 'rssi', 'seen'}
                     mappings = self.aircraftDB.getMappings(msg['hex'])
                     record = {
-                        'dist2d': distance,
-                        'dist3d': self.rxSite.distance3dNM(msg['lat'], msg['lon'], msg['alt_geom']),
-                        'tn': mappings[1],
                         'acType': mappings[2],
                         'acCode': mappings[3],
+                        'dist2d': distance,
+                        'dist3d': self.rxSite.distance3dNM(msg['lat'], msg['lon'], msg['alt_geom']),
+                        'ts': data['now'],
+                        'tn': mappings[1]
                     }
                     requiredFields = {k: msg.get(k) for k in requiredKeys}
                     record.update(requiredFields)
