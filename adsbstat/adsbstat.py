@@ -36,6 +36,8 @@ ADSB_STAT_VERSION = f"{ADSB_STAT_VERSION_MAJOR}.{ADSB_STAT_VERSION_MINOR}.{ADSB_
 
 FILE_UNCHANGED_TIMEOUT = 90  # throw exception if aircraft file doesn't change in 90 secs
 
+ADDITIONAL_FIELDS = True
+
 AIRCRAFT_JSON_FILE = "aircraft.json"
 
 DEFAULTS = {
@@ -84,20 +86,28 @@ class JsonHandler(FileSystemEventHandler):
                 distance = self.rxSite.distance2dNM(msg['lat'], msg['lon'])
                 logging.debug("distance: %f", distance)
                 if distance <= self.rxSite.max2dDistance:
-                    missingFields = {'alt_geom', 'category', 'gs', 'hex', 'rssi'} - msg.keys()
-                    if missingFields:
-                        logging.error("Message is missing fields: %s", missingFields)
+                    requiredKeys = {'alt_geom', 'category', 'gs', 'hex', 'seen_pos'}
+                    missingKeys = requiredKeys  - msg.keys()
+                    if missingKeys:
+                        logging.error("Message is missing fields: %s", missingKeys)
                         return
-                    # add additional fields to the message
-                    msg['now'] = data['now']
-                    msg['dist2d'] = distance
-                    msg['dist3d'] = self.rxSite.distance3dNM(msg['lat'], msg['lon'], msg['alt_geom'])
-                    mappings = self.aircraftDB.getMappings(msg['hex'])
-                    msg['tailNumber'] = mappings[1]
-                    msg['aircraftType'] = mappings[2]
-                    msg['aircraftCode'] = mappings[3]
-                    pprint(msg)  #### TMP TMP TMP
 
+                    additionalKeys = {'baro_rate', 'emergency', 'geom_rate', 'rssi', 'seen'}
+                    mappings = self.aircraftDB.getMappings(msg['hex'])
+                    if 'flight' in msg and msg['flight'] != mappings[1]:
+                        logging.error("Flight and Tail Number mismatch (%s != %s)",
+                                      msg['flight'], mappings[1])
+                    record = {
+                        'dist2d': distance,
+                        'dist3d': self.rxSite.distance3dNM(msg['lat'], msg['lon'], msg['alt_geom']),
+                        'tn': mappings[1],
+                        'acType': mappings[2],
+                        'acCode': mappings[3],
+                    }
+                    if ADDITIONAL_FIELDS:
+                        addedFields = {k: msg.get(k) for k in additionalKeys}
+                        record.update(addedFields)
+                    print(record)  #### TMP TMP TMP
 
 class ExitGracefully:
     def __init__(self):
