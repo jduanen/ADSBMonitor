@@ -7,7 +7,6 @@
 #
 
 import argparse
-from datetime import datetime
 import json
 import logging
 import os
@@ -20,10 +19,11 @@ import time
 import yaml
 
 from watchdog.observers.polling import PollingObserver
-from watchdog.events import FileSystemEventHandler
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from JsonFileHandler import JsonFileHandler
 from ReceiverSite import ReceiverSite
+from Tracks import Tracks
 from common.AircraftDB import AircraftDB
 
 import pdb  ## pdb.set_trace()
@@ -33,6 +33,8 @@ ADSB_STAT_VERSION_MAJOR = 0
 ADSB_STAT_VERSION_MINOR = 1
 ADSB_STAT_VERSION_PATCH = 0
 ADSB_STAT_VERSION = f"{ADSB_STAT_VERSION_MAJOR}.{ADSB_STAT_VERSION_MINOR}.{ADSB_STAT_VERSION_PATCH}"
+
+STALE_TRACK_TIME = 20 #58  # garbage collect records after 58secs
 
 FILE_UNCHANGED_TIMEOUT = 90  # throw exception if aircraft file doesn't change in 90 secs
 
@@ -48,41 +50,33 @@ DEFAULTS = {
     'verbose': 0
 }
 
-stopEvent = None
+
+class ExitGracefully:
+    def __init__(self, stopEvent):
+        ''' Register signals that can cause an exit
+        '''
+        self.stopEvent = stopEvent
+        signal.signal(signal.SIGINT, self._signalHandler)   # Ctl-C
+        signal.signal(signal.SIGTERM, self._signalHandler)  # kill command
+        signal.signal(signal.SIGHUP, self._signalHandler)   # terminal closed
+
+    def _signalHandler(self, sig, frame):
+        ''' Catch SIGHUP to force a restart and SIGINT to stop
+        '''
+        match sig:
+            case signal.SIGHUP:
+                logging.info("SIGHUP: stopping")
+                self.stopEvent.set()
+            case signal.SIGINT:
+                logging.info("SIGINT: stopping")
+                self.stopEvent.set()
+            case _:
+                logging.info("unknown signal: %s", sig)
 
 
-class MsgHandler(FileSystemEventHandler):
-    def __init__(self, filePath, aircraftDB, receiverSite):
-        self.filePath = filePath
-        self.aircraftDB = aircraftDB
-        self.rxSite = receiverSite
-        self.lastChanged = time.time()
-        self.records = {}
-
-    '''
-    def on_any_event(self, event):
-        logging.debug("Event: %s, Path: %s, Dir: %s", event.event_type, event.src_path, event.is_directory)
-    '''
-
-    def on_created(self, event):
-        self.lastChanged = time.time()
-        if event.src_path.endswith(AIRCRAFT_JSON_FILE) and event.is_directory is False:
-            self.readJson()
-
-    def readJson(self):
-        try:
-            text = self.filePath.read_text(encoding='utf-8')
-            data = json.loads(text)
-            if not data:
-                logging.error("No data read")
-                return
-        except Exception as e:
-            logging.error("Failed to read '%s': %s", self.filePath, e)
-        ts = datetime.fromtimestamp(data['now'])
-        logging.debug("aircraft file updated @ %s; data['now']=%s; # msgs: %d",
-                      datetime.fromtimestamp(time.time()), ts, len(data['aircraft']))
-        #### TODO put data integrity checks here -- data.now, data.messages, data.aircraft[]
-        for msg in data['aircraft']:
+def processTracks():
+    print("ProcessTracks")  #### FIXME
+'''
             if {'lat', 'lon'} <= msg.keys():
                 distance = self.rxSite.distance2dNM(msg['lat'], msg['lon'])
                 logging.debug("distance: %f", distance)
@@ -96,6 +90,9 @@ class MsgHandler(FileSystemEventHandler):
                     additionalKeys = {'baro_rate', 'emergency', 'flight', 'geom_rate', 'rssi', 'seen'}
                     hexId = msg['hex']
                     mappings = self.aircraftDB.getMappings(hexId)
+                    if not mappings[0]:
+                        logging.error("HexId '%s' not found in AircraftDB", hexId)
+                        continue
                     record = {
                         'acType': mappings[2],
                         'acCode': mappings[3],
@@ -116,30 +113,19 @@ class MsgHandler(FileSystemEventHandler):
                         self.records[hexId] = [record]
                     #### TMP TMP TMP
                     for h, l in self.records.items():
-                        print(f"> {h}: {len(l)}")
+                        lastSeen = l[-1]['ts'] + l[-1]['seen_pos']
+                        print(f"> {h}: {len(l)}, {datetime.fromtimestamp(lastSeen)}")
                     print("")
 
-class ExitGracefully:
-    def __init__(self):
-        ''' Register signals that can cause an exit
-        '''
-        signal.signal(signal.SIGINT, self._signalHandler)   # Ctl-C
-        signal.signal(signal.SIGTERM, self._signalHandler)  # kill command
-        signal.signal(signal.SIGHUP, self._signalHandler)   # terminal closed
-
-    def _signalHandler(self, sig, frame):
-        ''' Catch SIGHUP to force a restart and SIGINT to stop
-        '''
-        match sig:
-            case signal.SIGHUP:
-                logging.info("SIGHUP: stopping")
-                stopEvent.set()
-            case signal.SIGINT:
-                logging.info("SIGINT: stopping")
-                stopEvent.set()
-            case _:
-                logging.info("unknown signal: %s", sig)
-
+                    # GC the track records
+                    for hexId, recordList in self.records.items():
+                        lastSeen = l[-1]['ts'] + l[-1]['seen_pos']
+                        now = time.time()
+                        print(f"{l[-1]['ts']}, {l[-1]['seen_pos']}, {now}")
+                        if now > lastSeen + STALE_TRACK_TIME:
+                            print(f"GC: {hexId}")
+                            del(self.records[hexId])
+'''
 
 
 def getOpts():
@@ -219,11 +205,8 @@ def getOpts():
 
 
 def run(options):
-    global stopEvent
-
     stopEvent = threading.Event()
-
-    ExitGracefully()
+    ExitGracefully(stopEvent)
 
     if options['verbose'] > 1:
         json.dump(options, sys.stdout, indent=4, sort_keys=True)
@@ -236,12 +219,13 @@ def run(options):
     if options['verbose'] > 1:
         rxSite.print()
 
+    tracks = Tracks(aircraftDB, rxSite, STALE_TRACK_TIME)
+
     dumpDir = Path(options['adsbPath'])
 
-    #### TODO add check for file not changing in some amount of time and bail
     observer = PollingObserver()
     aircraftJsonPath = dumpDir / AIRCRAFT_JSON_FILE
-    handler = MsgHandler(aircraftJsonPath, aircraftDB, rxSite)
+    handler = JsonFileHandler(aircraftJsonPath, tracks, processTracks)
     observer.schedule(handler, path=str(aircraftJsonPath), recursive=False)
     observer.start()
     logging.debug("Watching %s...", str(aircraftJsonPath))
