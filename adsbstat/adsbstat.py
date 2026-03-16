@@ -104,6 +104,8 @@ class JsonHandler(FileSystemEventHandler):
                         'acType': mappings[2],
                         'acCode': mappings[3],
                     }
+                    requiredFields = {k: msg.get(k) for k in requiredKeys}
+                    record.update(requiredFields)
                     if ADDITIONAL_FIELDS:
                         addedFields = {k: msg.get(k) for k in additionalKeys}
                         record.update(addedFields)
