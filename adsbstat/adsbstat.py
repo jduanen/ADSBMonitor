@@ -92,11 +92,8 @@ class JsonHandler(FileSystemEventHandler):
                         logging.error("Message is missing fields: %s", missingKeys)
                         return
 
-                    additionalKeys = {'baro_rate', 'emergency', 'geom_rate', 'rssi', 'seen'}
+                    additionalKeys = {'baro_rate', 'emergency', 'flight', 'geom_rate', 'rssi', 'seen'}
                     mappings = self.aircraftDB.getMappings(msg['hex'])
-                    if 'flight' in msg and msg['flight'].rstrip() != mappings[1]:
-                        logging.error("Flight and Tail Number mismatch (%s != %s)",
-                                      msg['flight'], mappings[1])
                     record = {
                         'dist2d': distance,
                         'dist3d': self.rxSite.distance3dNM(msg['lat'], msg['lon'], msg['alt_geom']),
