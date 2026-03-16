@@ -94,7 +94,7 @@ class JsonHandler(FileSystemEventHandler):
 
                     additionalKeys = {'baro_rate', 'emergency', 'geom_rate', 'rssi', 'seen'}
                     mappings = self.aircraftDB.getMappings(msg['hex'])
-                    if 'flight' in msg and msg['flight'] != mappings[1]:
+                    if 'flight' in msg and msg['flight'].rstrip() != mappings[1]:
                         logging.error("Flight and Tail Number mismatch (%s != %s)",
                                       msg['flight'], mappings[1])
                     record = {
