@@ -5,6 +5,7 @@
 import json
 import logging
 import sys
+import threading
 import time
 
 
@@ -14,20 +15,27 @@ class Tracks:
         self.receiverSite = receiverSite
         self.staleTime = staleTime
         self.tracks = {}
+        self._timer = None
+        self._startTimer()
 
-    def addMessage(self, msgTime, msg):
-        hexId = msg['hex']
-        if hexId not in self.tracks:
-            self.tracks[hexId] = []
-        self.tracks[hexId].append({'msgTime': msgTime, 'msg': msg})
+    def _startTimer(self):
+        self._timer = threading.Timer(self.staleTime, self._garbageCollect)
+        self._timer.start()
 
-    def garbageCollect(self):
+    def _restartTimer(self):
+        self._stopTimer()
+        self._startTimer()
+
+    def _stopTimer(self):
+        if self._timer:
+            self._timer.cancel()
+
+    def _garbageCollect(self):
         staleHexIds = []
         for hexId, messages in self.tracks.items():
             for msg in messages:
                 seen = msg['msg'].get('seen')
                 if not seen:
-                    logging.warning("'seen' field missing from message, skipping")
                     continue
                 lastSeenTime = msg['msgTime'] - seen
                 now = time.time()
@@ -36,10 +44,25 @@ class Tracks:
         for hexId in staleHexIds:
             self.tracks.pop(hexId, None)
             logging.debug("Delete: %s", hexId)
+        self._restartTimer()
+
+    def addMessage(self, msgTime, msg):
+        hexId = msg['hex']
+        if hexId not in self.tracks:
+            self.tracks[hexId] = []
+        self.tracks[hexId].append({'msgTime': msgTime, 'msg': msg})
+
+    def startGarbageCollect(self):
+        self._restartTimer()
+
+    def stopGarbageCollect(self):
+        self._stopTimer()
+
+    def numberOfTracks(self):
+        return len(self.tracks)
 
     def printAll(self):
         json.dump(self.tracks, sys.stdout, indent=4, sort_keys=True)
-
 
 
 '''
