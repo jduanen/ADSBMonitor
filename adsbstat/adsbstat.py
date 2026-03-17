@@ -22,9 +22,9 @@ from watchdog.observers.polling import PollingObserver
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from JsonFileHandler import JsonFileHandler
-from ReceiverSite import ReceiverSite
-from Tracks import Tracks
 from common.AircraftDB import AircraftDB
+from common.ReceiverSite import ReceiverSite
+from common.Tracks import Tracks
 
 import pdb  ## pdb.set_trace()
 
