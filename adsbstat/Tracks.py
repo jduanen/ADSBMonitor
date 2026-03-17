@@ -73,21 +73,3 @@ class Tracks:
 
     def printAll(self):
         json.dump(self.tracks, sys.stdout, indent=4, sort_keys=True)
-
-
-
-'''
-    def update(self, message, rxTime):
-        self.track['updateTime'] = time.time()
-        if 'seen_pos' in message.keys():
-            self.track['seenPosTime'] = rxTime - message['seen_pos']
-        if 'seen' in message.keys():
-            self.track['seenTime'] = rxTime - message['seen']
-        self.track.update(message)
-
-    def getHexId(self):
-        return self.track['hex']
-
-    def getUpdateTime(self):
-        return self.track.get('updateTime', 0.0)
-'''
