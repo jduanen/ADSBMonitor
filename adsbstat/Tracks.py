@@ -38,7 +38,7 @@ class Tracks:
         if self._timer:
             self._timer.cancel()
 
-    def _garbageCollect(self):
+    def _garbageCollect(self):  #### FIXME -- only check the most recent message, not all of them
         staleHexIds = []
         with self._lock:
             for hexId, messages in self.tracks.items():
