@@ -17,11 +17,11 @@
 #
 
 import argparse
-from datetime import datetime
 import json
 import logging
 import os
 from pathlib import Path
+from pprint import pprint
 import signal
 import sys
 import threading
@@ -29,22 +29,27 @@ import time
 import yaml
 
 from watchdog.observers.polling import PollingObserver
-from watchdog.events import FileSystemEventHandler
 
-from Track import Track
-from MyMqtt import MyMqtt
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from AdsbMqtt import AdsbMqtt
+from JsonFileHandler import JsonFileHandler
+from common.AircraftDB import AircraftDB
+from common.ReceiverSite import ReceiverSite
+from common.Tracks import Tracks
 
 import pdb  ## pdb.set_trace()
 
 
-ADSB_MON_VERSION_MAJOR = 0
-ADSB_MON_VERSION_MINOR = 1
-ADSB_MON_VERSION_PATCH = 0
-ADSB_MON_VERSION = f"{ADSB_MON_VERSION_MAJOR}.{ADSB_MON_VERSION_MINOR}.{ADSB_MON_VERSION_PATCH}"
+ADSB_STAT_VERSION_MAJOR = 0
+ADSB_STAT_VERSION_MINOR = 1
+ADSB_STAT_VERSION_PATCH = 0
+ADSB_STAT_VERSION = f"{ADSB_STAT_VERSION_MAJOR}.{ADSB_STAT_VERSION_MINOR}.{ADSB_STAT_VERSION_PATCH}"
 
-TRACK_STALE_TIME = 58  #### TMP TMP TMP(60 * 3)  # consider a track stale if no updates in 3mins
+STALE_TRACK_TIME = 58  # garbage collect records after 58secs
 
-GC_RUN_INTERVAL = (60 * 1)   # run the garbage collector every 1mins
+FILE_UNCHANGED_TIMEOUT = 90  # throw exception if aircraft file doesn't change in 90 secs
+
+ADDITIONAL_FIELDS = True
 
 AIRCRAFT_JSON_FILE = "aircraft.json"
 
@@ -53,6 +58,8 @@ MQTT_CLIENT_ID = "adsb_vehicles"
 DEFAULTS = {
     'logFile': None,
     'logLevel': "WARNING",
+    'maxDistance': None,
+    'name': "Home",
     'readHistory': False,
     'mqttHost': "homeassitant.lan",
     'mqttPort': 1883,
@@ -62,46 +69,12 @@ DEFAULTS = {
     'verbose': 0
 }
 
-tracks = {}
-
-stopEvent = None
-
-lock = threading.Lock()
-
-mqttClient = None
-
-debug = False
-
-
-class JsonHandler(FileSystemEventHandler):
-    def __init__(self, filePath):
-        self.filePath = filePath
-
-    def on_created(self, event):
-        logging.debug(f"Event: {event.event_type}, Path: {event.src_path}, Dir: {event.is_directory}")
-        if event.src_path.endswith(AIRCRAFT_JSON_FILE) and event.is_directory is False:
-            self.readJson()
-
-    def readJson(self):
-        numTracks = len(tracks)
-        publishTracksCountUpdateMsg(numTracks)
-        logging.debug(f"Updated tracks count: {numTracks}")
-        try:
-            text = self.filePath.read_text(encoding='utf-8')
-            data = json.loads(text)
-            ts = datetime.fromtimestamp(data['now'])
-            logging.debug(f"aircraft.json updated @ {datetime.fromtimestamp(time.time())}; data['now']={ts}; # msgs: {len(data['aircraft'])}")
-            #### TODO put data integrity checks here -- data.now, data.messages, data.aircraft[]
-            for msg in data['aircraft']:
-                processMsg(msg['hex'], msg, data['now'])
-        except Exception as e:
-            logging.error(f"Failed to read {self.filePath}: {e}")
-
 
 class ExitGracefully:
-    def __init__(self):
+    def __init__(self, stopEvent):
         ''' Register signals that can cause an exit
         '''
+        self.stopEvent = stopEvent
         signal.signal(signal.SIGINT, self._signalHandler)   # Ctl-C
         signal.signal(signal.SIGTERM, self._signalHandler)  # kill command
         signal.signal(signal.SIGHUP, self._signalHandler)   # terminal closed
@@ -112,177 +85,15 @@ class ExitGracefully:
         match sig:
             case signal.SIGHUP:
                 logging.info("SIGHUP: stopping")
-                stopEvent.set()
+                self.stopEvent.set()
             case signal.SIGINT:
                 logging.info("SIGINT: stopping")
-                stopEvent.set()
+                self.stopEvent.set()
             case _:
-                logging.info(f"unknown signal: {sig}")
+                logging.info("unknown signal: %s", sig)
 
-
-# Service discovery and state update
-def publishServiceDiscoveryMsg():
-    topic = "homeassistant/binary_sensor/adsb_monitor/status/config"
-    msg = {
-        "name": "ADS-B Monitor",
-        "device_class": "connectivity",
-        "state_topic": "adsb/monitor/status",
-        "payload_on": "online",
-        "payload_off": "offline",
-        "unique_id": "adsb_monitor_status",
-        "device": {
-            "identifiers": ["adsb_monitor"],
-            "name": "ADS-B Receiver",
-            "manufacturer": "Raspberry Pi 4B",
-            "model": "FlightAware USB",
-            "sw_version": "bookworm"
-
-        },
-        "origin": {
-            "name": "adsbmon.py",
-            "sw": f"{ADSB_MON_VERSION_MAJOR}.{ADSB_MON_VERSION_MINOR}"
-        }
-    }
-    mqttClient.publishJson(topic, msg, retain=True)
-
-
-def publishServiceStateMsg(online):
-    topic = "adsb/monitor/status"
-    msg = "online" if online else "offline"
-    mqttClient.publishJson(topic, msg, retain=True)
-
-
-# Track discovery, null discovery, and update
-def publishTrackDiscoveryMsg(hexId):
-    topic = f"homeassistant/sensor/adsb_{hexId}/config"
-    msg = {
-        "name": f"ADS-B Flight {hexId}",
-        "unique_id": f"{hexId}",
-        "state_topic": f"adsb/vehicles/{hexId}/state",
-        "unit_of_measurement": "vehicles",
-        "device": {
-            "identifiers": [f"adsb_vehicle_{hexId}"],
-            "name": f"Vehicle {hexId}",
-        },
-        "json_attributes_topic": f"adsb/vehicles/state",
-        "value_template": "{{ value_json.icao24 }}",
-        "device_class": None,
-        "state_class": None,
-        "origin": {
-            "name": "adsbmon.py",
-            "sw": f"{ADSB_MON_VERSION_MAJOR}.{ADSB_MON_VERSION_MINOR}"
-        }
-    }
-    mqttClient.publishJson(topic, msg, retain=True)
-
-
-def publishNullTrackDiscoveryMsg(hexId):
-    topic = f"homeassistant/sensor/adsb_{hexId}/config"
-    mqttClient.publishJson(topic, "", retain=True)
-
-
-def publishTrackUpdateMsg(hexId, message):
-    topic = f"adsb/vehicles/{hexId}/state"
-    mqttClient.publishJson(topic, message)
-
-
-# Tracks count discovery, null discovery, and update
-def publishTracksCountDiscoveryMsg():
-    topic = "homeassistant/sensor/adsb_monitor/count/config"
-    msg = {
-        "name": "ADS-B Monitor vehicles count",
-        "state_topic": "adsb/monitor/count",
-        "unique_id": "adsb_monitor_count",
-        "unit_of_measurement": "vehicles",
-        "device_class": None,
-        "state_class": "measurement",
-        "device": {
-            "identifiers": ["adsb_monitor"],
-            "name": "ADS-B Receiver",
-            "manufacturer": "Raspberry Pi 4B",
-            "model": "FlightAware USB",
-            "sw_version": "bookworm"
-        },
-        "origin": {
-            "name": "adsbmon.py",
-            "sw": f"{ADSB_MON_VERSION_MAJOR}.{ADSB_MON_VERSION_MINOR}"
-        }
-    }
-    mqttClient.publishJson(topic, msg, retain=True)
-
-
-def publishNullTracksCountDiscoveryMsg():
-    topic = "homeassistant/sensor/adsb_monitor/count/config"
-    mqttClient.publishJson(topic, "", retain=True)
-
-
-def publishTracksCountUpdateMsg(numTracks):
-    topic = "adsb/monitor/count"
-    msg = numTracks
-    mqttClient.publishJson(topic, msg, retain=True)
-
-
-def processMsg(hexId, message, rxTime):
-    if hexId in tracks:
-        tracks[hexId].update(message, rxTime)
-        logging.debug(f"Updated track: {hexId}")
-    else:
-        if not debug:
-            publishTrackDiscoveryMsg(hexId)
-            logging.debug(f"Published discovery message for {hexId}")
-        else:
-            logging.debug(f"Skipped publishing Track discovery message for {hexId}")
-        newTrack = Track(message, rxTime)
-        with lock:
-            tracks[hexId] = newTrack
-        logging.debug(f"Created and updated new track: {hexId}")
-    if not debug:
-        publishTrackUpdateMsg(hexId, message)
-        logging.debug(f"Published update message for {hexId}")
-    else:
-        logging.debug(f"Skipped publishing Track update message for {hexId}")
-
-
-def tracksGCLoop():
-    while not stopEvent.is_set():
-        now = time.time()
-        logging.info(f"Garbage collect stale tracks @ {now}")
-        staleTracks = [v for k, v in tracks.items() if now - v.getUpdateTime() > TRACK_STALE_TIME]
-        logging.info(f"Number of stale tracks: {len(staleTracks)}; # total tracks: {len(tracks)}")
-        for t in staleTracks:
-            publishNullTrackDiscoveryMsg(t.getHexId())
-            with lock:
-                del tracks[t.getHexId()]
-            logging.debug(f"Deleted state track: {t.getHexId}")
-        stopEvent.wait(GC_RUN_INTERVAL)
-    logging.debug("tracksGCLoop exited")
-
-
-def printTracks():
-    numTracks = len(tracks)
-    logging.info(f"Number of Tracks: {numTracks}")
-    if numTracks:
-        print("[")
-        for hexCode, track in tracks.items():
-            track.print()
-            if (numTracks := numTracks - 1):
-                print(",")
-        print("]")
-
-
-#### FIXME improve the options code with
-'''
-args = parser.parse_args()
-if args.config:
-    config = configparser.ConfigParser()
-    config.read(args.config)
-    parser.set_defaults(**dict(config['DEFAULT']))
-    args = parser.parse_args()  # Override with CLI args
-'''
 
 def getOpts():
-    global debug
-
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "-b", "--mqttHost", action="store", type=str,
@@ -291,8 +102,11 @@ def getOpts():
         "-c", "--configFilePath", action="store", type=str,
         help="Path to the configuration YAML file")
     ap.add_argument(
-        "-d", "--debug", action="store_true", default=False,
-        help="Suppress publishing of track messages")
+        "-D", "--maxDistance", action="store", type=float,
+        help="Max distance from receiver in NM")
+    ap.add_argument(
+        "-d", "--dbFilePath", action="store", type=str,
+        help="Path to the plane database")
     ap.add_argument(
         "-k", "--mqttKeepalive", action="store", type=int,
         help="MQTT connection keep alive time (secs)")
@@ -304,11 +118,17 @@ def getOpts():
         "-l", "--logFile", action="store", type=str,
         help="Path to the logfile (create it if it doesn't exist)")
     ap.add_argument(
+        "-m", "--mqttPort", action="store", type=int,
+        help="MQTT Broker port number")
+    ap.add_argument(
+        "-n", "--name", action="store", type=str,
+        help="Name of the receiver site")
+    ap.add_argument(
         "-P", "--mqttPasswd", action="store", type=str,
         help="MQTT password")
     ap.add_argument(
-        "-p", "--mqttPort", action="store", type=int,
-        help="MQTT Broker port number")
+        "-p", "--position", metavar=("lat", "lon", "alt"), type=float, nargs=3,
+        help="Position: <lat> <lon> <alt>")
     ap.add_argument(
         "-r", "--readHistory", action="store_true", default=False,
         help="Read history files on startup")
@@ -324,23 +144,23 @@ def getOpts():
 
     # cliOpts=cmd line options; fileOpts=conf file options; DEFAULT=default options
     configFilePath = None
-    conf = {'version': ADSB_MON_VERSION, 'cliOpts': cliOpts, 'fileOpts': {},
+    conf = {'version': ADSB_STAT_VERSION, 'cliOpts': cliOpts, 'fileOpts': {},
             'config': {}, 'defaults': DEFAULTS}
     if conf['cliOpts']['configFilePath']:
         configFilePath = cliOpts['configFilePath']
     else:
-        if 'configFilePath' in DEFAULTS:
-            configFilePath = DEFAULTS['configFilePath']
+        configFilePath = DEFAULTS.get('configFilePath', None)
     if configFilePath:
         if not os.path.exists(configFilePath):
             print(f"ERROR: Invalid configuration file path: {configFilePath}", file=sys.stderr)
-            exit(1)
-        with open(configFilePath, "r") as confFile:
+            sys.exit(1)
+        with open(configFilePath, "r", encoding="utf-8") as confFile:
             fileOpts = list(yaml.load_all(confFile, Loader=yaml.Loader))
             if len(fileOpts) >= 1:
                 conf['fileOpts'] = fileOpts[0]
                 if len(fileOpts) > 1:
-                    print("WARNING: Multiple config docs in file. Using the first one", file=sys.stderr)
+                    print("WARNING: Multiple config docs. Using the first one",
+                          file=sys.stderr)
 
     c = conf['config']
     for opt in [action.dest for action in ap._actions if action.dest != 'help']:
@@ -364,87 +184,74 @@ def getOpts():
     if 'adsbPath' not in c:
         logging.error("Must specify the path to where dump1090-fa stores its files")
         sys.exit(1)
-
-    debug = c['debug']
-
     return c
 
 
 def run(options):
-    global mqttClient, stopEvent
-
     stopEvent = threading.Event()
-
-    ExitGracefully()
-
-    def usr1Handler(sig, frame):
-        printTracks()
-
-    signal.signal(signal.SIGUSR1, usr1Handler)   # 'kill -USR1' to print current tracks
+    ExitGracefully(stopEvent)
 
     if options['verbose'] > 1:
         json.dump(options, sys.stdout, indent=4, sort_keys=True)
 
+    aircraftDB = AircraftDB(options['dbFilePath'])
+
+    rxSite = ReceiverSite(options['name'], options['maxDistance'],
+                          options['position'][0], options['position'][1],
+                          options['position'][2])
+    if options['verbose'] > 1:
+        rxSite.print()
+
+    tracks = Tracks(aircraftDB, rxSite, STALE_TRACK_TIME)
+
+    def usr1Handler(sig, frame):
+        tracks.printAll()
+
+    signal.signal(signal.SIGUSR1, usr1Handler)   # 'kill -USR1' to print current tracks
+
     dumpDir = Path(options['adsbPath'])
 
-    mqttClient = MyMqtt(MQTT_CLIENT_ID,
-                        options['mqttHost'], options['mqttPort'],
-                        options['mqttKeepalive'], options['mqttUsername'],
-                        options['mqttPasswd'])
+    mqttClient = AdsbMqtt(MQTT_CLIENT_ID,
+                          options['mqttHost'], options['mqttPort'],
+                          options['mqttKeepalive'], options['mqttUsername'],
+                          options['mqttPasswd'])
     if not mqttClient:
         sys.exit(1)
 
-    publishServiceDiscoveryMsg()
-    publishTracksCountDiscoveryMsg()
+    def createProcessMessage(aircraftDatabase, receiverSite, mqttClient):
+        ''' Returns a closure that captures instances of AircraftDB and ReceiverSite
+             for use in process message
+        '''
+        def processMessage(hexId, tracks):
+            acDB = aircraftDatabase
+            rx = receiverSite
+            mqttC = mqttClient
+            print(f"process message: {hexId} #{tracks.numberOfTracks()}")  #### FIXME
+        return processMessage
 
-    if options['readHistory']:
-        historyFiles = sorted(dumpDir.glob("history_*.json"),
-                              key=lambda p: p.stat().st_mtime)
-        for path in historyFiles:
-            try:
-                data = json.loads(path.read_text('utf-8'))
-                ts = datetime.fromtimestamp(data['now'])
-                logging.info(f"read history file {path.name}; now={ts}; {len(data['aircraft'])} msgs")
-                #### TODO put data integrity checks here -- data.now, data.messages, data.aircraft[]
-                for msg in data['aircraft']:
-                    processMsg(msg['hex'], msg, data['now'])
-            except json.JSONDecodeError:
-                logging.warning(f"Invalid JSON in: {path}")
-            except UnicodeDecodeError:
-                logging.warning(f"Can't read: {path}")
+    processMsg = createProcessMessage(aircraftDB, rxSite)
 
-    publishServiceStateMsg(True)
-    logging.info(f"sent Service state True @ {datetime.fromtimestamp(time.time())}")
-
-    #### TODO add check for file not changing in some amount of time and bail
     observer = PollingObserver()
     aircraftJsonPath = dumpDir / AIRCRAFT_JSON_FILE
-    handler = JsonHandler(aircraftJsonPath)
+    handler = JsonFileHandler(aircraftJsonPath, tracks, processMsg)
     observer.schedule(handler, path=str(aircraftJsonPath), recursive=False)
     observer.start()
-    logging.debug(f"Watching {str(aircraftJsonPath)}...")
-
-    gcThread = threading.Thread(target=tracksGCLoop, daemon=True)
-    gcThread.start()
-    logging.debug(f"Running Garbage Collector every {GC_RUN_INTERVAL}secs")
-
+    logging.debug("Watching %s...", str(aircraftJsonPath))
     try:
         while observer.is_alive() and not stopEvent.is_set():
-            if stopEvent.wait(1.0):  # 1s poll + check signal
+            time.sleep(1.0)  # 1sec poll
+            if time.time() - handler.lastChanged > FILE_UNCHANGED_TIMEOUT:
+                logging.error("No update of %s for %s secs",
+                              aircraftJsonPath, FILE_UNCHANGED_TIMEOUT)
+                break
+            if stopEvent.wait(0.1):  # non-blocking check
                 break
     finally:
         observer.stop()
         observer.join()
     logging.debug("Observer exited")
 
-    publishTracksCountUpdateMsg(0)
-    publishServiceStateMsg(False)
-    logging.info("sent Service state False @ {datetime.fromtimestamp(time.time())}")
-    time.sleep(0.6)  # allow mqtt message to be sent
-
-    if opts['verbose'] > 2:
-        printTracks()
-
+    tracks.stopGarbageCollect()
     logging.debug("Shutdown complete, exiting")
     sys.exit(0)
 
@@ -452,3 +259,55 @@ def run(options):
 if __name__ == "__main__":
     opts = getOpts()
     run(opts)
+
+
+'''
+            if {'lat', 'lon'} <= msg.keys():
+                distance = self.rxSite.distance2dNM(msg['lat'], msg['lon'])
+                logging.debug("distance: %f", distance)
+                if distance <= self.rxSite.max2dDistance:
+                    requiredKeys = {'alt_geom', 'category', 'gs', 'hex', 'seen_pos'}
+                    missingKeys = requiredKeys  - msg.keys()
+                    if missingKeys:
+                        logging.error("Message is missing fields: %s", missingKeys)
+                        continue
+
+                    additionalKeys = {'baro_rate', 'emergency', 'flight', 'geom_rate', 'rssi', 'seen'}
+                    hexId = msg['hex']
+                    mappings = self.aircraftDB.getMappings(hexId)
+                    if not mappings[0]:
+                        logging.error("HexId '%s' not found in AircraftDB", hexId)
+                        continue
+                    record = {
+                        'acType': mappings[2],
+                        'acCode': mappings[3],
+                        'dist2d': distance,
+                        'dist3d': self.rxSite.distance3dNM(msg['lat'], msg['lon'], msg['alt_geom']),
+                        'ts': data['now'],
+                        'tn': mappings[1]
+                    }
+                    requiredFields = {k: msg.get(k) for k in requiredKeys}
+                    record.update(requiredFields)
+                    if ADDITIONAL_FIELDS:
+                        addedFields = {k: msg.get(k) for k in additionalKeys}
+                        record.update(addedFields)
+
+                    if hexId in self.records:
+                        self.records[hexId].append(record)
+                    else:
+                        self.records[hexId] = [record]
+                    #### TMP TMP TMP
+                    for h, l in self.records.items():
+                        lastSeen = l[-1]['ts'] + l[-1]['seen_pos']
+                        print(f"> {h}: {len(l)}, {datetime.fromtimestamp(lastSeen)}")
+                    print("")
+
+                    # GC the track records
+                    for hexId, recordList in self.records.items():
+                        lastSeen = l[-1]['ts'] + l[-1]['seen_pos']
+                        now = time.time()
+                        print(f"{l[-1]['ts']}, {l[-1]['seen_pos']}, {now}")
+                        if now > lastSeen + STALE_TRACK_TIME:
+                            print(f"GC: {hexId}")
+                            del(self.records[hexId])
+'''
