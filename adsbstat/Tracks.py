@@ -38,18 +38,18 @@ class Tracks:
         if self._timer:
             self._timer.cancel()
 
-    def _garbageCollect(self):  #### FIXME -- only check the most recent message, not all of them
+    def _garbageCollect(self):
         staleHexIds = []
         with self._lock:
             for hexId, messages in self.tracks.items():
-                for msg in messages:
-                    seen = msg['msg'].get('seen')
-                    if not seen:
-                        continue
-                    lastSeenTime = msg['msgTime'] - seen
-                    now = time.time()
-                    if (now - lastSeenTime) > self.staleTime:
-                        staleHexIds.append(hexId)
+                mostRecentMsg = messages[-1]
+                seen = mostRecentMsg['msg'].get('seen')
+                if not seen:
+                    continue
+                lastSeenTime = mostRecentMsg['msgTime'] - seen
+                now = time.time()
+                if (now - lastSeenTime) > self.staleTime:
+                    staleHexIds.append(hexId)
             for hexId in staleHexIds:
                 self.tracks.pop(hexId, None)
                 logging.debug("Delete: %s", hexId)
