@@ -9,17 +9,25 @@ import threading
 import time
 
 
+#### TODO tune this value appropriately
+GC_INTERVAL = 10  # run the garbage collector every 10 secs
+
+
 class Tracks:
     def __init__(self, aircraftDB, receiverSite, staleTime):
         self.aircraftDB = aircraftDB
         self.receiverSite = receiverSite
         self.staleTime = staleTime
         self.tracks = {}
+        self._lock = threading.Lock()
         self._timer = None
         self._startTimer()
 
+    def __del__(self):
+        self._stopTimer()
+
     def _startTimer(self):
-        self._timer = threading.Timer(self.staleTime, self._garbageCollect)
+        self._timer = threading.Timer(GC_INTERVAL, self._garbageCollect)
         self._timer.start()
 
     def _restartTimer(self):
@@ -32,25 +40,27 @@ class Tracks:
 
     def _garbageCollect(self):
         staleHexIds = []
-        for hexId, messages in self.tracks.items():
-            for msg in messages:
-                seen = msg['msg'].get('seen')
-                if not seen:
-                    continue
-                lastSeenTime = msg['msgTime'] - seen
-                now = time.time()
-                if (now - lastSeenTime) > self.staleTime:
-                    staleHexIds.append(hexId)
-        for hexId in staleHexIds:
-            self.tracks.pop(hexId, None)
-            logging.debug("Delete: %s", hexId)
+        with self._lock:
+            for hexId, messages in self.tracks.items():
+                for msg in messages:
+                    seen = msg['msg'].get('seen')
+                    if not seen:
+                        continue
+                    lastSeenTime = msg['msgTime'] - seen
+                    now = time.time()
+                    if (now - lastSeenTime) > self.staleTime:
+                        staleHexIds.append(hexId)
+            for hexId in staleHexIds:
+                self.tracks.pop(hexId, None)
+                logging.debug("Delete: %s", hexId)
         self._restartTimer()
 
     def addMessage(self, msgTime, msg):
         hexId = msg['hex']
-        if hexId not in self.tracks:
-            self.tracks[hexId] = []
-        self.tracks[hexId].append({'msgTime': msgTime, 'msg': msg})
+        with self._lock:
+            if hexId not in self.tracks:
+                self.tracks[hexId] = []
+            self.tracks[hexId].append({'msgTime': msgTime, 'msg': msg})
 
     def startGarbageCollect(self):
         self._restartTimer()
@@ -64,57 +74,6 @@ class Tracks:
     def printAll(self):
         json.dump(self.tracks, sys.stdout, indent=4, sort_keys=True)
 
-
-'''
-            if {'lat', 'lon'} <= msg.keys():
-                distance = self.rxSite.distance2dNM(msg['lat'], msg['lon'])
-                logging.debug("distance: %f", distance)
-                if distance <= self.rxSite.max2dDistance:
-                    requiredKeys = {'alt_geom', 'category', 'gs', 'hex', 'seen_pos'}
-                    missingKeys = requiredKeys  - msg.keys()
-                    if missingKeys:
-                        logging.error("Message is missing fields: %s", missingKeys)
-                        continue
-
-                    additionalKeys = {'baro_rate', 'emergency', 'flight', 'geom_rate', 'rssi', 'seen'}
-                    hexId = msg['hex']
-                    mappings = self.aircraftDB.getMappings(hexId)
-                    if not mappings[0]:
-                        logging.error("HexId '%s' not found in AircraftDB", hexId)
-                        continue
-                    record = {
-                        'acType': mappings[2],
-                        'acCode': mappings[3],
-                        'dist2d': distance,
-                        'dist3d': self.rxSite.distance3dNM(msg['lat'], msg['lon'], msg['alt_geom']),
-                        'ts': data['now'],
-                        'tn': mappings[1]
-                    }
-                    requiredFields = {k: msg.get(k) for k in requiredKeys}
-                    record.update(requiredFields)
-                    if ADDITIONAL_FIELDS:
-                        addedFields = {k: msg.get(k) for k in additionalKeys}
-                        record.update(addedFields)
-
-                    if hexId in self.records:
-                        self.records[hexId].append(record)
-                    else:
-                        self.records[hexId] = [record]
-                    #### TMP TMP TMP
-                    for h, l in self.records.items():
-                        lastSeen = l[-1]['ts'] + l[-1]['seen_pos']
-                        print(f"> {h}: {len(l)}, {datetime.fromtimestamp(lastSeen)}")
-                    print("")
-
-                    # GC the track records
-                    for hexId, recordList in self.records.items():
-                        lastSeen = l[-1]['ts'] + l[-1]['seen_pos']
-                        now = time.time()
-                        print(f"{l[-1]['ts']}, {l[-1]['seen_pos']}, {now}")
-                        if now > lastSeen + STALE_TRACK_TIME:
-                            print(f"GC: {hexId}")
-                            del(self.records[hexId])
-'''
 
 
 '''
