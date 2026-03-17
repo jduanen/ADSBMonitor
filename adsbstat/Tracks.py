@@ -40,6 +40,7 @@ class Tracks:
         json.dump(self.tracks, sys.stdout, indent=4, sort_keys=True)
 
 
+
 '''
             if {'lat', 'lon'} <= msg.keys():
                 distance = self.rxSite.distance2dNM(msg['lat'], msg['lon'])
