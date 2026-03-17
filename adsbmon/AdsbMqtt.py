@@ -5,6 +5,9 @@
 import json
 import logging
 
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from common.BaseMqtt import BaseMqtt
+
 
 class AdsbMqtt(BaseMqtt):
     def __init__(self, clientId, host, port, keepalive, username=None, password=None):
