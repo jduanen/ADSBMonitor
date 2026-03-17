@@ -30,20 +30,20 @@ import yaml
 
 from watchdog.observers.polling import PollingObserver
 
+ADSB_MON_VERSION_MAJOR = 0
+ADSB_MON_VERSION_MINOR = 2
+ADSB_MON_VERSION_PATCH = 0
+ADSB_MON_VERSION = f"{ADSB_MON_VERSION_MAJOR}.{ADSB_MON_VERSION_MINOR}.{ADSB_MON_VERSION_PATCH}"
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from AdsbMqtt import AdsbMqtt
-from JsonFileHandler import JsonFileHandler
+from common.JsonFileHandler import JsonFileHandler
 from common.AircraftDB import AircraftDB
 from common.ReceiverSite import ReceiverSite
 from common.Tracks import Tracks
 
 import pdb  ## pdb.set_trace()
 
-
-ADSB_STAT_VERSION_MAJOR = 0
-ADSB_STAT_VERSION_MINOR = 1
-ADSB_STAT_VERSION_PATCH = 0
-ADSB_STAT_VERSION = f"{ADSB_STAT_VERSION_MAJOR}.{ADSB_STAT_VERSION_MINOR}.{ADSB_STAT_VERSION_PATCH}"
 
 STALE_TRACK_TIME = 58  # garbage collect records after 58secs
 
@@ -144,7 +144,7 @@ def getOpts():
 
     # cliOpts=cmd line options; fileOpts=conf file options; DEFAULT=default options
     configFilePath = None
-    conf = {'version': ADSB_STAT_VERSION, 'cliOpts': cliOpts, 'fileOpts': {},
+    conf = {'version': ADSB_MON_VERSION, 'cliOpts': cliOpts, 'fileOpts': {},
             'config': {}, 'defaults': DEFAULTS}
     if conf['cliOpts']['configFilePath']:
         configFilePath = cliOpts['configFilePath']
