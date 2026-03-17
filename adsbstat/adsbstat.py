@@ -20,19 +20,19 @@ import yaml
 
 from watchdog.observers.polling import PollingObserver
 
+ADSB_STAT_VERSION_MAJOR = 0
+ADSB_STAT_VERSION_MINOR = 1
+ADSB_STAT_VERSION_PATCH = 0
+ADSB_STAT_VERSION = f"{ADSB_STAT_VERSION_MAJOR}.{ADSB_STAT_VERSION_MINOR}.{ADSB_STAT_VERSION_PATCH}"
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from JsonFileHandler import JsonFileHandler
+from common.JsonFileHandler import JsonFileHandler
 from common.AircraftDB import AircraftDB
 from common.ReceiverSite import ReceiverSite
 from common.Tracks import Tracks
 
 import pdb  ## pdb.set_trace()
 
-
-ADSB_STAT_VERSION_MAJOR = 0
-ADSB_STAT_VERSION_MINOR = 1
-ADSB_STAT_VERSION_PATCH = 0
-ADSB_STAT_VERSION = f"{ADSB_STAT_VERSION_MAJOR}.{ADSB_STAT_VERSION_MINOR}.{ADSB_STAT_VERSION_PATCH}"
 
 STALE_TRACK_TIME = 58  # garbage collect records after 58secs
 
