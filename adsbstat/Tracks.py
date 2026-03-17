@@ -23,15 +23,16 @@ class Tracks:
 
     def garbageCollect(self):
         staleHexIds = []
-        for hexId, track in self.tracks.items():
-            seen = track['msg'].get('seen')
-            if not seen:
-                logging.warning("seen field missing, skipping")
-                continue
-            lastSeenTime = track['msgTime'] - seen
-            now = time.time()
-            if (now - lastSeenTime) > self.staleTime:
-                staleHexIds.append(hexId)
+        for hexId, messages in self.tracks.items():
+            for msg in messages:
+                seen = msg['msg'].get('seen')
+                if not seen:
+                    logging.warning("'seen' field missing from message, skipping")
+                    continue
+                lastSeenTime = msg['msgTime'] - seen
+                now = time.time()
+                if (now - lastSeenTime) > self.staleTime:
+                    staleHexIds.append(hexId)
         for hexId in staleHexIds:
             self.tracks.pop(hexId, None)
             logging.debug("Delete: %s", hexId)
