@@ -34,7 +34,7 @@ ADSB_STAT_VERSION_MINOR = 1
 ADSB_STAT_VERSION_PATCH = 0
 ADSB_STAT_VERSION = f"{ADSB_STAT_VERSION_MAJOR}.{ADSB_STAT_VERSION_MINOR}.{ADSB_STAT_VERSION_PATCH}"
 
-STALE_TRACK_TIME = 20 #58  # garbage collect records after 58secs
+STALE_TRACK_TIME = 58  # garbage collect records after 58secs
 
 FILE_UNCHANGED_TIMEOUT = 90  # throw exception if aircraft file doesn't change in 90 secs
 
