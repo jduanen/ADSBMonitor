@@ -1,3 +1,0 @@
-PyYAML
-watchdog
-paho.mqtt
