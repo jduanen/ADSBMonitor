@@ -181,7 +181,7 @@ def run(options):
         def processMessage(hexId, tracks):
             acDB = aircraftDatabase
             rx = receiverSite
-            print(f"process message: {hexId} #{len(tracks)}")  #### FIXME
+            print(f"process message: {hexId} #{tracks.numberOfTracks()}")  #### FIXME
         return processMessage
 
     processMsg = createProcessMessage(aircraftDB, rxSite)
@@ -206,6 +206,7 @@ def run(options):
         observer.join()
     logging.debug("Observer exited")
 
+    tracks.stopGarbageCollect()
     logging.debug("Shutdown complete, exiting")
     sys.exit(0)
 
