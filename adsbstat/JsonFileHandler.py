@@ -47,5 +47,4 @@ class JsonFileHandler(FileSystemEventHandler):
         else:
             for msg in data['aircraft']:
                 self.tracks.addMessage(data['now'], msg)
-                self.tracks.garbageCollect()
-                self.processTracks()
+#####                self.processTracks()
