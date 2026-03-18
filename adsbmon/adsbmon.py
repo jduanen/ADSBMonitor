@@ -249,8 +249,8 @@ def run(options):
             rx = receiverSite
             mC = mqttClient
             maxDist = maxDistance
-            print(f"added message: {hexId} #{tracks.numberOfTracks()}")  #### TMP TMP TMP
-            msg = tracks[hexId]['msg'][-1]
+            print(f"added message: {hexId} #{len(tracks)}")  #### TMP TMP TMP
+            msg = tracks[hexId][-1]['msg']
             if not {'lat', 'lon'} <= msg.keys():
                 print("Missing position, skipping...")
                 return
