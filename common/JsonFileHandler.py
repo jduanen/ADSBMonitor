@@ -28,6 +28,8 @@ class JsonFileHandler(FileSystemEventHandler):
         #### TODO can I remove this test?
         if event.is_directory is False:
             self.readJson()
+        else:  #### TMP TMP TMP
+            logging.error("Event is directory")
 
     def readJson(self):
         try:
