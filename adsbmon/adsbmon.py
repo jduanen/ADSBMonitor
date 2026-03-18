@@ -190,7 +190,7 @@ def getOpts():
 
 def run(options):
     def usr1Handler(sig, frame):
-        tracks.printAll()
+        tracksObj.printAll()
     signal.signal(signal.SIGUSR1, usr1Handler)   # 'kill -USR1' to print current tracks
 
     stopEvent = threading.Event()
@@ -200,13 +200,13 @@ def run(options):
         json.dump(options, sys.stdout, indent=4, sort_keys=True)
         print("")
 
-    aircraftDB = AircraftDB(options['dbFilePath'])
+    aircraftDbObj = AircraftDB(options['dbFilePath'])
 
-    rxSite = ReceiverSite(options['name'], options['maxDistance'],
-                          options['position'][0], options['position'][1],
-                          options['position'][2])
+    rxSiteObj = ReceiverSite(options['name'], options['maxDistance'],
+                             options['position'][0], options['position'][1],
+                             options['position'][2])
     if options['verbose'] > 1:
-        rxSite.print()
+        rxSiteObj.print()
 
     mqttClient = AdsbMqtt(MQTT_CLIENT_ID,
                           options['mqttHost'], options['mqttPort'],
@@ -219,7 +219,7 @@ def run(options):
         ''' Returns a closure that captures instances of AircraftDB and ReceiverSite
              for use in dealing with a stale track that is to be garbage collected
         '''
-        def staleTrack(hexId, tracks):
+        def staleTrack(staleHexId, currentTracks):
             ''' Called whenever a stale track is to be deleted
                 N.B. This is called before the track is deleted
             '''
@@ -227,11 +227,11 @@ def run(options):
             rx = receiverSite
             mC = mqttClient
             maxDist = maxDistance
-            print(f"stale Track: {hexId} #{tracks.numberOfTracks()}")  #### TMP TMP TMP
+            print(f"stale Track: {staleHexId} #{currentTracks.numberOfTracks()}")  #### TMP TMP TMP
         return staleTrack
-    staleTrackHandler = createStaleTrackHandler(aircraftDB, rxSite, mqttClient, options['maxDistance'])
+    staleTrackHandler = createStaleTrackHandler(aircraftDbObj, rxSiteObj, mqttClient, options['maxDistance'])
 
-    tracks = Tracks(aircraftDB, rxSite, STALE_TRACK_TIME, staleTrackHandler)
+    tracksObj = Tracks(aircraftDbObj, rxSiteObj, STALE_TRACK_TIME, staleTrackHandler)
 
     mqttClient.publishServiceDiscoveryMsg()
     mqttClient.publishTracksCountDiscoveryMsg()
@@ -241,7 +241,7 @@ def run(options):
         ''' Returns a closure that captures instances of AircraftDB and ReceiverSite
              for use in dealing with a new ADS-B message
         '''
-        def addedMessage(hexId, tracks):
+        def addedMessage(newHexId, currentTracks):
             ''' This is called whenever a new ADS-B message is added to a track
                 N.B. This is called after the message has been added to its Track
             '''
@@ -249,8 +249,8 @@ def run(options):
             rx = receiverSite
             mC = mqttClient
             maxDist = maxDistance
-            print(f"added message: {hexId} #{len(tracks)}")  #### TMP TMP TMP
-            msg = tracks[hexId][-1]['msg']
+            print(f"added message: {newHexId} #{len(currentTracks)}")  #### TMP TMP TMP
+            msg = currentTracks[hexId][-1]['msg']
             if not {'lat', 'lon'} <= msg.keys():
                 print("Missing position, skipping...")
                 return
@@ -259,7 +259,7 @@ def run(options):
             rDist = msg.r_dst
             print(f"lat={lat}, lon={lon}, rDist={rDist}")
         return addedMessage
-    addedMessageHandler = createAddedMessageHandler(aircraftDB, rxSite, mqttClient, options['maxDistance'])
+    addedMessageHandler = createAddedMessageHandler(aircraftDbObj, rxSiteObj, mqttClient, options['maxDistance'])
 
     dumpDir = Path(options['adsbPath'])
 
@@ -287,7 +287,7 @@ def run(options):
 
     observer = PollingObserver()
     aircraftJsonPath = dumpDir / AIRCRAFT_JSON_FILE
-    handler = JsonFileHandler(aircraftJsonPath, tracks, addedMessageHandler)
+    handler = JsonFileHandler(aircraftJsonPath, tracksObj, addedMessageHandler)
     observer.schedule(handler, path=str(aircraftJsonPath), recursive=False)
     observer.start()
     logging.debug("Watching %s...", str(aircraftJsonPath))
@@ -310,7 +310,7 @@ def run(options):
     logging.info("Published Tracks Count 0 and Service state False @ %s",
                  datetime.fromtimestamp(time.time()))
     time.sleep(0.6)  # allow mqtt message to be sent before exiting
-    tracks.stopGarbageCollect()
+    tracksObj.stopGarbageCollect()
     logging.debug("Shutdown complete, exiting")
     sys.exit(0)
 
