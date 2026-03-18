@@ -34,7 +34,7 @@ class BaseMqtt:
         if self.username and self.password:
             self.client.username_pw_set(self.username, self.password)
 
-        self.client.on_connect = MyMqtt._onMqttConnect
+        self.client.on_connect = BaseMqtt._onMqttConnect
 
         if self.client.connect(self.host, self.port, self.keepalive) != mqtt.MQTT_ERR_SUCCESS:
             logging.error("Failed to connect to %s on port %d", self.host, self.port)
