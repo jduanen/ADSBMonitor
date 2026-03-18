@@ -14,10 +14,11 @@ GC_INTERVAL = 10  # run the garbage collector every 10 secs
 
 
 class Tracks:
-    def __init__(self, aircraftDB, receiverSite, staleTime):
+    def __init__(self, aircraftDB, receiverSite, staleTime, staleTrackHandler):
         self.aircraftDB = aircraftDB
         self.receiverSite = receiverSite
         self.staleTime = staleTime
+        self.staleTrack = staleTrackHandler
         self.tracks = {}
         self._lock = threading.Lock()
         self._timer = None
@@ -51,6 +52,7 @@ class Tracks:
                 if (now - lastSeenTime) > self.staleTime:
                     staleHexIds.append(hexId)
             for hexId in staleHexIds:
+                self.staleTrack(hexId, self.tracks)
                 self.tracks.pop(hexId, None)
                 logging.debug("Delete: %s", hexId)
         self._restartTimer()

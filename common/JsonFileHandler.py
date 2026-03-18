@@ -12,10 +12,10 @@ from watchdog.events import FileSystemEventHandler
 
 
 class JsonFileHandler(FileSystemEventHandler):
-    def __init__(self, filePath, tracks, processMessage):
+    def __init__(self, filePath, tracks, addedMessageHandler):
         self.filePath = filePath
         self.tracks = tracks
-        self.processMessage = processMessage
+        self.addedMessage = addedMessageHandler
         self.lastChanged = time.time()
 
     '''
@@ -47,4 +47,4 @@ class JsonFileHandler(FileSystemEventHandler):
         else:
             for msg in data['aircraft']:
                 self.tracks.addMessage(data['now'], msg)
-                self.processMessage(msg['hex'], self.tracks)
+                self.addedMessage(msg['hex'], self.tracks)
