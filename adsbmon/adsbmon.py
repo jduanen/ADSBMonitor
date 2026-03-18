@@ -227,7 +227,7 @@ def run(options):
             rx = receiverSite
             mC = mqttClient
             maxDist = maxDistance
-            print(f"stale Track: {staleHexId} #{currentTracks.numberOfTracks()}")  #### TMP TMP TMP
+            print(f"stale Track: {staleHexId} #{len(currentTracks)}")  #### TMP TMP TMP
         return staleTrack
     staleTrackHandler = createStaleTrackHandler(aircraftDbObj, rxSiteObj, mqttClient, options['maxDistance'])
 
@@ -255,7 +255,6 @@ def run(options):
             lat = msg['lat']
             lon = msg['lon']
             rDist = msg['r_dst']
-            print(f"lat={lat}, lon={lon}, rDist={rDist}")
         return addedMessage
     addedMessageHandler = createAddedMessageHandler(aircraftDbObj, rxSiteObj, mqttClient, options['maxDistance'])
 
