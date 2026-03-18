@@ -12,9 +12,9 @@ from watchdog.events import FileSystemEventHandler
 
 
 class JsonFileHandler(FileSystemEventHandler):
-    def __init__(self, filePath, tracks, addedMessageHandler):
+    def __init__(self, filePath, tracksObj, addedMessageHandler):
         self.filePath = filePath
-        self.tracks = tracks
+        self.tracksObj = tracksObj
         self.addedMessage = addedMessageHandler
         self.lastChanged = time.time()
 
@@ -48,5 +48,5 @@ class JsonFileHandler(FileSystemEventHandler):
             logging.error("Data is missing keys: %s", missingKeys)
         else:
             for msg in data['aircraft']:
-                self.tracks.addMessage(data['now'], msg)
-                self.addedMessage(msg['hex'], self.tracks)
+                self.tracksObj.addMessage(data['now'], msg)
+                self.addedMessage(msg['hex'], self.tracksObj.tracks)
