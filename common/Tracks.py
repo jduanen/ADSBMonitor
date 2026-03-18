@@ -1,6 +1,15 @@
 #!/usr/bin/python3
 #
 # Object that encapsulates active ADS-B vehicle tracks
+#
+# tracks
+#   - <hexId>
+#     - msgTime: <time>
+#     - msg: <adsbMsg>
+#   - <hexId>
+#     - msgTime: <time>
+#     - msg: <adsbMsg>
+#   ...
 
 import json
 import logging
