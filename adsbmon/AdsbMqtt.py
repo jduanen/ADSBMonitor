@@ -3,8 +3,6 @@
 # Object that extends the basic MQTT object to publish MQTT versions of the
 #  ADS-B messages from readsb
 
-import json
-import logging
 import os
 import sys
 
@@ -13,8 +11,9 @@ from common.BaseMqtt import BaseMqtt
 
 
 class AdsbMqtt(BaseMqtt):
-    def __init__(self, clientId, host, port, keepalive, username=None, password=None):
+    def __init__(self, clientId, host, port, keepalive, username=None, password=None, version=""):
         super().__init__(clientId, host, port, keepalive, username, password)
+        self.version = version
 
     def publishServiceDiscoveryMsg(self):
         ''' Service discovery and state update
@@ -36,19 +35,19 @@ class AdsbMqtt(BaseMqtt):
             },
             "origin": {
                 "name": "adsbmon.py",
-                "sw": f"{ADSB_MON_VERSION_MAJOR}.{ADSB_MON_VERSION_MINOR}"
+                "sw": self.version
             }
         }
         self.publishJson(topic, msg, retain=True)
 
-    def publishServiceStateMsg(online):
+    def publishServiceStateMsg(self, online):
         ''' ?
         '''
         topic = "adsb/monitor/status"
         msg = "online" if online else "offline"
-        this.publishJson(topic, msg, retain=True)
+        self.publishJson(topic, msg, retain=True)
 
-    def publishTrackDiscoveryMsg(hexId):
+    def publishTrackDiscoveryMsg(self, hexId):
         ''' Track discovery, null discovery, and update
         '''
         topic = f"homeassistant/sensor/adsb_{hexId}/config"
@@ -61,30 +60,30 @@ class AdsbMqtt(BaseMqtt):
                 "identifiers": [f"adsb_vehicle_{hexId}"],
                 "name": f"Vehicle {hexId}",
             },
-            "json_attributes_topic": f"adsb/vehicles/state",
+            "json_attributes_topic": "adsb/vehicles/state",
             "value_template": "{{ value_json.icao24 }}",
             "device_class": None,
             "state_class": None,
             "origin": {
                 "name": "adsbmon.py",
-                "sw": f"{ADSB_MON_VERSION_MAJOR}.{ADSB_MON_VERSION_MINOR}"
+                "sw": self.version
             }
         }
-        this.publishJson(topic, msg, retain=True)
+        self.publishJson(topic, msg, retain=True)
 
-    def publishNullTrackDiscoveryMsg(hexId):
+    def publishNullTrackDiscoveryMsg(self, hexId):
         ''' ?
         '''
         topic = f"homeassistant/sensor/adsb_{hexId}/config"
-        this.publishJson(topic, "", retain=True)
+        self.publishJson(topic, "", retain=True)
 
-    def publishTrackUpdateMsg(hexId, message):
+    def publishTrackUpdateMsg(self, hexId, message):
         ''' ?
         '''
         topic = f"adsb/vehicles/{hexId}/state"
-        this.publishJson(topic, message)
+        self.publishJson(topic, message)
 
-    def publishTracksCountDiscoveryMsg():
+    def publishTracksCountDiscoveryMsg(self):
         ''' Tracks count discovery, null discovery, and update
         '''
         topic = "homeassistant/sensor/adsb_monitor/count/config"
@@ -104,20 +103,20 @@ class AdsbMqtt(BaseMqtt):
             },
             "origin": {
                 "name": "adsbmon.py",
-                "sw": f"{ADSB_MON_VERSION_MAJOR}.{ADSB_MON_VERSION_MINOR}"
+                "sw": self.version
             }
         }
-        this.publishJson(topic, msg, retain=True)
+        self.publishJson(topic, msg, retain=True)
 
-    def publishNullTracksCountDiscoveryMsg():
+    def publishNullTracksCountDiscoveryMsg(self):
         ''' ?
         '''
         topic = "homeassistant/sensor/adsb_monitor/count/config"
-        this.publishJson(topic, "", retain=True)
+        self.publishJson(topic, "", retain=True)
 
-    def publishTracksCountUpdateMsg(numTracks):
+    def publishTracksCountUpdateMsg(self, numTracks):
         ''' ?
         '''
         topic = "adsb/monitor/count"
         msg = numTracks
-        this.publishJson(topic, msg, retain=True)
+        self.publishJson(topic, msg, retain=True)
