@@ -254,9 +254,9 @@ def run(options):
             if not {'lat', 'lon'} <= msg.keys():
                 print("Missing position, skipping...")
                 return
-            lat = msg.lat
-            lon = msg.lon
-            rDist = msg.r_dst
+            lat = msg['lat']
+            lon = msg['lon']
+            rDist = msg['r_dst']
             print(f"lat={lat}, lon={lon}, rDist={rDist}")
         return addedMessage
     addedMessageHandler = createAddedMessageHandler(aircraftDbObj, rxSiteObj, mqttClient, options['maxDistance'])
