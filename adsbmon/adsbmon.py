@@ -283,7 +283,7 @@ def run(options):
             if not {'lat', 'lon'} <= msg.keys():
                 return
 
-            if newHexId not in currentTracks:
+            if len(currentTracks[newHexId]) <= 1:
                 mqttClient.publishTrackDiscoveryMsg(newHexId)
             mqttClient.publishTrackUpdateMsg(newHexId, msg)
 
