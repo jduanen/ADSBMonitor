@@ -87,7 +87,7 @@ class Tracks:
         return len(self.tracks)
 
     def removeAllTracks(self):
-        hexIds = self.tracks.keys()
+        hexIds = list(self.tracks.keys())
         for hexId in hexIds:
             self.staleTrackHandler(hexId, self.tracks)
             self.tracks.pop(hexId)
