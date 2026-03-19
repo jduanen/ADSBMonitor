@@ -276,16 +276,17 @@ def run(options):
             '''
             acDB = aircraftDatabase
             rx = receiverSite
-            mC = mqttClient
+
             msg = currentTracks[newHexId][-1]['msg']
             if not {'lat', 'lon'} <= msg.keys():
                 return
-            lat = msg['lat']
-            lon = msg['lon']
-            rDist = msg['r_dst']
-            numTracks = len(currentTracks[newHexId])
-            print(f"New track: {newHexId}, #={numTracks}")
-            mC.publishTracksCountUpdateMsg(numTracks)
+
+            if newHexId not in currentTracks:
+                mqttClient.publishTrackDiscoveryMsg(newHexId)
+            mqttClient.publishTrackUpdateMsg(newHexId, msg)
+
+            numTracks = len(currentTracks)
+            mqttClient.publishTracksCountUpdateMsg(numTracks)
         return addedMessage
     addedMessageHandler = createAddedMessageHandler(aircraftDbObj, rxSiteObj, mqttClient)
 
