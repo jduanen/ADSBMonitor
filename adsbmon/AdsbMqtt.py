@@ -48,12 +48,12 @@ class AdsbMqtt(BaseMqtt):
         msg = "online" if online else "offline"
         self.publishJson(topic, msg, retain=True)
 
-    def publishTrackDiscoveryMsg(self, hexId):
+    def publishTrackDiscoveryMsg(self, hexId, trackName):
         ''' Track discovery, null discovery, and update
         '''
         topic = f"homeassistant/sensor/adsb_{hexId}/config"
         msg = {
-            "name": f"ADS-B Flight {hexId}",
+            "name": trackName,
             "unique_id": f"adsb_{hexId}",
             "state_topic": f"adsb/vehicles/{hexId}/state",
             "value_template": "{{ value_json.icao24 }}",
