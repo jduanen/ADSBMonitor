@@ -256,6 +256,8 @@ def run(options):
             acDB = aircraftDatabase
             rx = receiverSite
             mC = mqttClient
+
+            mqttClient.publishNullTrackDiscoveryMsg(staleHexId)
             print(f"stale Track: {staleHexId} #{len(currentTracks)}")  #### TMP TMP TMP
         return staleTrack
     staleTrackHandler = createStaleTrackHandler(aircraftDbObj, rxSiteObj, mqttClient)
