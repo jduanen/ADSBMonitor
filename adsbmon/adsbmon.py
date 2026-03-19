@@ -336,6 +336,7 @@ def run(options):
         observer.join()
     logging.debug("Observer exited")
 
+    tracksObj.removeAllTracks()
     mqttClient.publishTracksCountUpdateMsg(0)
     mqttClient.publishServiceStateMsg(False)
     logging.info("Published Tracks Count 0 and Service state False @ %s",
