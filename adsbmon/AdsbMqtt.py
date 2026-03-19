@@ -3,6 +3,7 @@
 # Object that extends the basic MQTT object to publish MQTT versions of the
 #  ADS-B messages from readsb
 
+import logging
 import os
 import sys
 
@@ -53,15 +54,16 @@ class AdsbMqtt(BaseMqtt):
         topic = f"homeassistant/sensor/adsb_{hexId}/config"
         msg = {
             "name": f"ADS-B Flight {hexId}",
-            "unique_id": f"{hexId}",
+            "unique_id": f"adsb_{hexId}",
             "state_topic": f"adsb/vehicles/{hexId}/state",
-            "unit_of_measurement": "vehicles",
+            "value_template": "{{ value_json.icao24 }}",
+            "json_attributes_topic": f"adsb/vehicles/{hexId}/state",
+            "json_attributes_template": "{{ value_json | tojson }}",
             "device": {
                 "identifiers": [f"adsb_vehicle_{hexId}"],
-                "name": f"Vehicle {hexId}",
+                "name": f"ADS-B Vehicle {hexId}",
             },
-            "json_attributes_topic": "adsb/vehicles/state",
-            "value_template": "{{ value_json.icao24 }}",
+            "unit_of_measurement": "vehicles",
             "device_class": None,
             "state_class": None,
             "origin": {
@@ -120,3 +122,4 @@ class AdsbMqtt(BaseMqtt):
         topic = "adsb/monitor/count"
         msg = numTracks
         self.publishJson(topic, msg, retain=True)
+        logging.debug(f"Tracks Count: {numTracks}")
