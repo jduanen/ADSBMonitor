@@ -284,7 +284,12 @@ def run(options):
                 return
 
             if len(currentTracks[newHexId]) <= 1:
-                mqttClient.publishTrackDiscoveryMsg(newHexId)
+                planeInfo = acDB.getMappings(newHexId)
+                acType = planeInfo[2] if planeInfo[2] else "_"
+                acDesc = planeInfo[3] if planeInfo[3] else "_"
+                currentTracks[newHexId][-1]['msg']['state'] = f"{acType};{acDesc}"
+                trackName = currentTracks[newHexId][-1]['msg'].get('flight', newHexId)
+                mqttClient.publishTrackDiscoveryMsg(newHexId, trackName)
             mqttClient.publishTrackUpdateMsg(newHexId, msg)
 
             numTracks = len(currentTracks)
@@ -294,7 +299,7 @@ def run(options):
 
     dumpDir = Path(options['adsbPath'])
 
-    '''
+am    '''
 -    if options['readHistory']:
 -        historyFiles = sorted(dumpDir.glob("history_*.json"),
 -                              key=lambda p: p.stat().st_mtime)
