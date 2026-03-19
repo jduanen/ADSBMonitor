@@ -24,10 +24,13 @@ GC_INTERVAL = 10  # run the garbage collector every 10 secs
 
 class Tracks:
     def __init__(self, aircraftDB, receiverSite, staleTime, staleTrackHandler):
+        ''' ?
+        '''
         self.aircraftDB = aircraftDB
         self.receiverSite = receiverSite
         self.staleTime = staleTime
         self.staleTrack = staleTrackHandler
+
         self.tracks = {}
         self._lock = threading.Lock()
         self._timer = None
@@ -67,6 +70,7 @@ class Tracks:
         self._restartTimer()
 
     def addMessage(self, msgTime, msg):
+        #### TODO implement filters
         hexId = msg['hex']
         with self._lock:
             if hexId not in self.tracks:
