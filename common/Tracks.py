@@ -29,7 +29,7 @@ class Tracks:
         self.aircraftDB = aircraftDB
         self.receiverSite = receiverSite
         self.staleTime = staleTime
-        self.staleTrack = staleTrackHandler
+        self.staleTrackHandler = staleTrackHandler
 
         self.tracks = {}
         self._lock = threading.Lock()
@@ -64,7 +64,7 @@ class Tracks:
                 if (now - lastSeenTime) > self.staleTime:
                     staleHexIds.append(hexId)
             for hexId in staleHexIds:
-                self.staleTrack(hexId, self.tracks)
+                self.staleTrackHandler(hexId, self.tracks)
                 self.tracks.pop(hexId, None)
                 logging.info("Delete: %s", hexId)
         self._restartTimer()
@@ -85,6 +85,13 @@ class Tracks:
 
     def numberOfTracks(self):
         return len(self.tracks)
+
+    def removeAllTracks(self):
+        hexIds = tracks.keys()
+        for hexId in hexIds:
+            self.staleTrackHandler(hexId, self.tracks)
+            self.tracks.pop(hexId)
+            logging.info("Delete: %s", hexId)
 
     def printAll(self):
         json.dump(self.tracks, sys.stdout, indent=4, sort_keys=True)
