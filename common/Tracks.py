@@ -66,7 +66,7 @@ class Tracks:
             for hexId in staleHexIds:
                 self.staleTrack(hexId, self.tracks)
                 self.tracks.pop(hexId, None)
-                logging.debug("Delete: %s", hexId)
+                logging.info("Delete: %s", hexId)
         self._restartTimer()
 
     def addMessage(self, msgTime, msg):
