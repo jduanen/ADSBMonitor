@@ -283,7 +283,9 @@ def run(options):
             lat = msg['lat']
             lon = msg['lon']
             rDist = msg['r_dst']
-            print(f"New track: {newHexId}, #={len(currentTracks[newHexId])}")
+            numTracks = len(currentTracks[newHexId])
+            print(f"New track: {newHexId}, #={numTracks}")
+            mC.publishTracksCountUpdateMsg(numTracks)
         return addedMessage
     addedMessageHandler = createAddedMessageHandler(aircraftDbObj, rxSiteObj, mqttClient)
 
