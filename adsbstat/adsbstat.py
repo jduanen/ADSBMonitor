@@ -110,7 +110,7 @@ def getOpts():
     ap.add_argument(
         "-s", "--slant", metavar=["min", "max"], type=float,
         help="Min/max slant distance filter constraint (from receiver in NM)")
-     ap.add_argument(
+    ap.add_argument(
         "-v", "--verbose", action="count",
         help="Print debug info")
     ap.add_argument("adsbPath",
