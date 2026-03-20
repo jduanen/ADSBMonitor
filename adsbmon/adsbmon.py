@@ -62,17 +62,17 @@ MQTT_CLIENT_ID = "adsb_vehicles"
 
 DEFAULTS = {
     'altitude': FilterConstraints(),
+    'distance': FilterConstraints(),
     'logFile': None,
     'logLevel': "WARNING",
-    'distance': FilterConstraints(),
-    'name': "Home",
-    'readHistory': False,
-    'slant': FilterConstraints(),
     'mqttHost': "homeassitant.lan",
     'mqttPort': 1883,
     'mqttUsername': None,
     'mqttPasswd': None,
     'mqttKeepalive': 60,  # 1min
+    'name': "Home",
+    'readHistory': False,
+    'slant': FilterConstraints(),
     'verbose': 0
 }
 
