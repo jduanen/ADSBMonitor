@@ -299,7 +299,7 @@ def run(options):
 
     dumpDir = Path(options['adsbPath'])
 
-am    '''
+    '''
 -    if options['readHistory']:
 -        historyFiles = sorted(dumpDir.glob("history_*.json"),
 -                              key=lambda p: p.stat().st_mtime)
