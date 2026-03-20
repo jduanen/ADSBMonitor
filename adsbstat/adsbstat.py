@@ -228,12 +228,23 @@ def run(options):
             rx = receiverSite
 
             msg = currentTracks[newHexId][-1]['msg']
-            if not {'lat', 'lon', 'alt_geom'} <= msg.keys():
-                logging.debug("Message is missing fields, skipping (%s)", newHexId)
+            missingKeys = set({'lat', 'lon'}) - msg.keys()
+            if missingKeys:
+                logging.debug("Message is missing fields, skipping (%s: %s)", newHexId, missingKeys)
+                #### FIXME need to remove the message (and track? if no messages?)
                 return
-            trackPosition = Position(msg['lat'], msg['lon'], msg['alt_geom'])
+            if 'alt_geom' in msg and msg['alt_geom']:
+                altitude = msg['alt_geom']
+            elif 'alt_baro' in msg and msg['alt_baro']:
+                altitude = msg['alt_baro']  #### FIXME -- convert to geom
+            else:
+                logging.debug("Message is missing altitude field, skipping (%s)", newHexId)
+                #### FIXME need to remove the message (and track? if no messages?)
+                return
+            trackPosition = Position(msg['lat'], msg['lon'], altitude)
             if not rx.withinVolume(trackPosition):
-                logging.debug("Track not in volume: skipping (%s)", trackPosition)
+                logging.debug("Track not in volume: skipping (%s: %s)", newHexId, trackPosition)
+                #### FIXME need to remove the message (and track? if no messages?)
                 return
 
             if len(currentTracks[newHexId]) <= 1:
