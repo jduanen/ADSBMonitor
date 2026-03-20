@@ -83,7 +83,7 @@ class AdsbMqtt(BaseMqtt):
         ''' ?
         '''
         topic = f"adsb/vehicles/{hexId}/state"
-        self.publishJson(topic, message)
+        self.publishJson(topic, message, retain=True)  #### FIXME
 
     def publishTracksCountDiscoveryMsg(self):
         ''' Tracks count discovery, null discovery, and update
