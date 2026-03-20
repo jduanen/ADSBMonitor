@@ -83,13 +83,13 @@ class ExitGracefully:
 def getOpts():
     ap = argparse.ArgumentParser()
     ap.add_argument(
-        "-a", "--altitude", metavar=["min", "max"], type=float,
+        "-a", "--altitude", metavar=["min", "max"], type=float, nargs=2,
         help="Min/max vertical difference filter constraint (from receiver in Feet)")
     ap.add_argument(
         "-c", "--configFilePath", action="store", type=str,
         help="Path to the configuration YAML file")
     ap.add_argument(
-        "-D", "--distance", metavar=["min", "max"], type=float,
+        "-D", "--distance", metavar=["min", "max"], type=float, nargs=2,
         help="Min/max surface distance filter constraint (from receiver in NM)")
     ap.add_argument(
         "-d", "--dbFilePath", action="store", type=str,
@@ -108,7 +108,7 @@ def getOpts():
         "-p", "--position", metavar=("lat", "lon", "alt"), type=float, nargs=3,
         help="Position: <lat> <lon> <alt>")
     ap.add_argument(
-        "-s", "--slant", metavar=["min", "max"], type=float,
+        "-s", "--slant", metavar=["min", "max"], type=float, nargs=2,
         help="Min/max slant distance filter constraint (from receiver in NM)")
     ap.add_argument(
         "-v", "--verbose", action="count",
