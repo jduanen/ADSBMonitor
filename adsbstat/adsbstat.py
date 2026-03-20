@@ -7,6 +7,7 @@
 #
 
 import argparse
+from collections import namedtuple
 import json
 import logging
 import os
@@ -24,6 +25,9 @@ ADSB_STAT_VERSION_MAJOR = 0
 ADSB_STAT_VERSION_MINOR = 1
 ADSB_STAT_VERSION_PATCH = 0
 ADSB_STAT_VERSION = f"{ADSB_STAT_VERSION_MAJOR}.{ADSB_STAT_VERSION_MINOR}.{ADSB_STAT_VERSION_PATCH}"
+
+Position = namedtuple("Position", ["latitude", "longitude", "altitude"], defaults=[None, None, None])
+FilterConstraints = namedtuple("FilterConstraints", ["min", "max"], defaults=[None, None])
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from common.JsonFileHandler import JsonFileHandler
@@ -43,10 +47,12 @@ ADDITIONAL_FIELDS = True
 AIRCRAFT_JSON_FILE = "aircraft.json"
 
 DEFAULTS = {
+    'altitude': FilterConstraints(),
+    'distance': FilterConstraints(),
     'logFile': None,
     'logLevel': "WARNING",
-    'maxDistance': 2.5,
     'name': "Home",
+    'slant': FilterConstraints(),
     'verbose': 0
 }
 
@@ -77,8 +83,14 @@ class ExitGracefully:
 def getOpts():
     ap = argparse.ArgumentParser()
     ap.add_argument(
+        "-a", "--altitude", metavar=["min", "max"], type=float,
+        help="Min/max vertical difference filter constraint (from receiver in Feet)")
+    ap.add_argument(
         "-c", "--configFilePath", action="store", type=str,
         help="Path to the configuration YAML file")
+    ap.add_argument(
+        "-D", "--distance", metavar=["min", "max"], type=float,
+        help="Min/max surface distance filter constraint (from receiver in NM)")
     ap.add_argument(
         "-d", "--dbFilePath", action="store", type=str,
         help="Path to the plane database")
@@ -90,15 +102,15 @@ def getOpts():
         "-l", "--logFile", action="store", type=str,
         help="Path to the logfile (create it if it doesn't exist)")
     ap.add_argument(
-        "-m", "--maxDistance", action="store", type=float,
-        help="Max distance from receiver in NM")
-    ap.add_argument(
         "-n", "--name", action="store", type=str,
         help="Name of the receiver site")
     ap.add_argument(
         "-p", "--position", metavar=("lat", "lon", "alt"), type=float, nargs=3,
         help="Position: <lat> <lon> <alt>")
     ap.add_argument(
+        "-s", "--slant", metavar=["min", "max"], type=float,
+        help="Min/max slant distance filter constraint (from receiver in NM)")
+     ap.add_argument(
         "-v", "--verbose", action="count",
         help="Print debug info")
     ap.add_argument("adsbPath",
@@ -144,6 +156,19 @@ def getOpts():
     else:
         logging.basicConfig(level=c['logLevel'])
 
+    if all(c['distance']) and c['distance'].min  >= c['distance'].max:
+        logging.error("Invalid constraint: ground distance min %f >= max %f NM",
+                      c['distance'][0], c['distance'][1])
+        sys.exit(1)
+    if all(c['slant']) and c['slant'].min  >= c['slant'].max:
+        logging.error("Invalid constraint: slant distance min %f >= max %f NM",
+                      c['slant'][0], c['slant'][1])
+        sys.exit(1)
+    if all(c['altitude']) and c['altitude'].min  >= c['altitude'].max:
+        logging.error("Invalid constraint: vertical distance min %f >= max %f NM",
+                      c['altitude'][0], c['altitude'][1])
+        sys.exit(1)
+
     if 'adsbPath' not in c:
         logging.error("Must specify the path to where dump1090-fa stores its files")
         sys.exit(1)
@@ -151,44 +176,80 @@ def getOpts():
 
 
 def run(options):
+    def usr1Handler(sig, frame):
+        tracksObj.printAll()
+    signal.signal(signal.SIGUSR1, usr1Handler)   # 'kill -USR1' to print current tracks
+
     stopEvent = threading.Event()
     ExitGracefully(stopEvent)
 
     if options['verbose'] > 1:
         json.dump(options, sys.stdout, indent=4, sort_keys=True)
+        print("")
 
-    aircraftDB = AircraftDB(options['dbFilePath'])
+    aircraftDbObj = AircraftDB(options['dbFilePath'])
 
-    rxSite = ReceiverSite(options['name'], options['maxDistance'],
-                          options['position'][0], options['position'][1],
-                          options['position'][2])
+    homePosition = Position(options['position'][0], options['position'][1],
+                            options['position'][2])
+    groundConstriants = FilterConstraints(options['distance'][0], options['distance'][1])
+    slantConstriants = FilterConstraints(options['slant'][0], options['slant'][1])
+    verticalConstriants = FilterConstraints(options['altitude'][0], options['altitude'][1])
+    rxSiteObj = ReceiverSite(options['name'], homePosition, slantConstriants,
+                             groundConstriants, verticalConstriants)
     if options['verbose'] > 1:
-        rxSite.print()
+        repr(rxSiteObj)
 
-    tracks = Tracks(aircraftDB, rxSite, STALE_TRACK_TIME)
+    def createStaleTrackHandler(aircraftDatabase, receiverSite, mqttClient):
+        ''' Returns a closure that captures instances of AircraftDB and ReceiverSite
+             for use in dealing with a stale track that is to be garbage collected
+        '''
+        def staleTrack(staleHexId, currentTracks):
+            ''' Called whenever a stale track is to be deleted
+                N.B. This is called before the track is deleted
+            '''
+            acDB = aircraftDatabase
+            rx = receiverSite
+            mC = mqttClient
 
-    def usr1Handler(sig, frame):
-        tracks.printAll()
+            print(f"stale Track: {staleHexId} #{len(currentTracks)}")  #### TMP TMP TMP
+        return staleTrack
+    staleTrackHandler = createStaleTrackHandler(aircraftDbObj, rxSiteObj, mqttClient)
 
-    signal.signal(signal.SIGUSR1, usr1Handler)   # 'kill -USR1' to print current tracks
+    tracksObj = Tracks(aircraftDbObj, rxSiteObj, STALE_TRACK_TIME, staleTrackHandler)
+
+    def createAddedMessageHandler(aircraftDatabase, receiverSite, mqttClient):
+        ''' Returns a closure that captures instances of AircraftDB and ReceiverSite
+             for use in dealing with a new ADS-B message
+        '''
+        def addedMessage(newHexId, currentTracks):
+            ''' This is called whenever a new ADS-B message is added to a track
+                N.B. This is called after the message has been added to its Track
+            '''
+            acDB = aircraftDatabase
+            rx = receiverSite
+
+            msg = currentTracks[newHexId][-1]['msg']
+            if not {'lat', 'lon'} <= msg.keys():
+                return
+
+            if len(currentTracks[newHexId]) <= 1:
+                trackName = currentTracks[newHexId][-1]['msg'].get('flight', newHexId)
+                print(f"new Track: {newHexId} {trackName} ", end="")
+
+            planeInfo = acDB.getMappings(newHexId)
+            currentTracks[newHexId][-1]['msg']['acType'] = planeInfo[2]
+            currentTracks[newHexId][-1]['msg']['acDesc'] = planeInfo[3]
+
+            numTracks = len(currentTracks)
+            print(f"# {numTracks}")
+        return addedMessage
+    addedMessageHandler = createAddedMessageHandler(aircraftDbObj, rxSiteObj, mqttClient)
 
     dumpDir = Path(options['adsbPath'])
 
-    def createProcessMessage(aircraftDatabase, receiverSite):
-        ''' Returns a closure that captures instances of AircraftDB and ReceiverSite
-             for use in process message
-        '''
-        def processMessage(hexId, tracks):
-            acDB = aircraftDatabase
-            rx = receiverSite
-            print(f"process message: {hexId} #{tracks.numberOfTracks()}")  #### FIXME
-        return processMessage
-
-    processMsg = createProcessMessage(aircraftDB, rxSite)
-
     observer = PollingObserver()
     aircraftJsonPath = dumpDir / AIRCRAFT_JSON_FILE
-    handler = JsonFileHandler(aircraftJsonPath, tracks, processMsg)
+    handler = JsonFileHandler(aircraftJsonPath, tracksObj, addedMessageHandler)
     observer.schedule(handler, path=str(aircraftJsonPath), recursive=False)
     observer.start()
     logging.debug("Watching %s...", str(aircraftJsonPath))
@@ -206,7 +267,8 @@ def run(options):
         observer.join()
     logging.debug("Observer exited")
 
-    tracks.stopGarbageCollect()
+    tracksObj.removeAllTracks()
+    tracksObj.stopGarbageCollect()
     logging.debug("Shutdown complete, exiting")
     sys.exit(0)
 
