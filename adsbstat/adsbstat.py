@@ -199,7 +199,7 @@ def run(options):
     if options['verbose'] > 1:
         repr(rxSiteObj)
 
-    def createStaleTrackHandler(aircraftDatabase, receiverSite, mqttClient):
+    def createStaleTrackHandler(aircraftDatabase, receiverSite):
         ''' Returns a closure that captures instances of AircraftDB and ReceiverSite
              for use in dealing with a stale track that is to be garbage collected
         '''
@@ -209,15 +209,14 @@ def run(options):
             '''
             acDB = aircraftDatabase
             rx = receiverSite
-            mC = mqttClient
 
             print(f"stale Track: {staleHexId} #{len(currentTracks)}")  #### TMP TMP TMP
         return staleTrack
-    staleTrackHandler = createStaleTrackHandler(aircraftDbObj, rxSiteObj, mqttClient)
+    staleTrackHandler = createStaleTrackHandler(aircraftDbObj, rxSiteObj)
 
     tracksObj = Tracks(aircraftDbObj, rxSiteObj, STALE_TRACK_TIME, staleTrackHandler)
 
-    def createAddedMessageHandler(aircraftDatabase, receiverSite, mqttClient):
+    def createAddedMessageHandler(aircraftDatabase, receiverSite):
         ''' Returns a closure that captures instances of AircraftDB and ReceiverSite
              for use in dealing with a new ADS-B message
         '''
@@ -243,7 +242,7 @@ def run(options):
             numTracks = len(currentTracks)
             print(f"# {numTracks}")
         return addedMessage
-    addedMessageHandler = createAddedMessageHandler(aircraftDbObj, rxSiteObj, mqttClient)
+    addedMessageHandler = createAddedMessageHandler(aircraftDbObj, rxSiteObj)
 
     dumpDir = Path(options['adsbPath'])
 
