@@ -228,12 +228,17 @@ def run(options):
             rx = receiverSite
 
             msg = currentTracks[newHexId][-1]['msg']
-            if not {'lat', 'lon'} <= msg.keys():
+            if not {'lat', 'lon', 'alt_geom'} <= msg.keys():
+                logging.debug("Message is missing fields, skipping (%s)", newHexId)
+                return
+            trackPosition = Position(msg['lat'], msg['lon'], msg['alt_geom'])
+            if not rx.withinVolume(trackPosition):
+                logging.debug("Track not in volume: skipping (%s)", trackPosition)
                 return
 
             if len(currentTracks[newHexId]) <= 1:
                 trackName = currentTracks[newHexId][-1]['msg'].get('flight', newHexId)
-                logging.debug(f"new Track: {newHexId} {trackName}")
+                logging.debug("new Track: %s %s", newHexId, trackName)
 
             planeInfo = acDB.getMappings(newHexId)
             currentTracks[newHexId][-1]['msg']['acType'] = planeInfo[2]
