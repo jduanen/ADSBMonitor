@@ -233,14 +233,11 @@ def run(options):
 
             if len(currentTracks[newHexId]) <= 1:
                 trackName = currentTracks[newHexId][-1]['msg'].get('flight', newHexId)
-                print(f"new Track: {newHexId} {trackName} ", end="")
+                logging.debug(f"new Track: {newHexId} {trackName}")
 
             planeInfo = acDB.getMappings(newHexId)
             currentTracks[newHexId][-1]['msg']['acType'] = planeInfo[2]
             currentTracks[newHexId][-1]['msg']['acDesc'] = planeInfo[3]
-
-            numTracks = len(currentTracks)
-            print(f"# {numTracks}")
         return addedMessage
     addedMessageHandler = createAddedMessageHandler(aircraftDbObj, rxSiteObj)
 
