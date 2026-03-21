@@ -63,6 +63,7 @@ MQTT_CLIENT_ID = "adsb_vehicles"
 DEFAULTS = {
     'altitude': FilterConstraints(),
     'distance': FilterConstraints(),
+    'interval': 60.0,
     'logFile': None,
     'logLevel': "WARNING",
     'mqttHost': "homeassitant.lan",
@@ -117,6 +118,9 @@ def getOpts():
     ap.add_argument(
         "-d", "--dbFilePath", action="store", type=str,
         help="Path to the plane database")
+    ap.add_argument(
+        "-i", "--interval", action="store", type=float,
+        help="Interval between publishing MQTT messages (in secs)")
     ap.add_argument(
         "-k", "--mqttKeepalive", action="store", type=int,
         help="MQTT connection keep alive time (secs)")
