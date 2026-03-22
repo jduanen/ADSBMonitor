@@ -266,11 +266,14 @@ def run(options):
                 altitude = None
                 logging.debug("Message is missing altitude field, skipping (%s)", newHexId)
 
-            inRange = True
-            targetDist = rx.slantDistanceNM(msg['lat'], msg['lon'], altitude)
-            if targetDist > options['distance']:
-                inRange = False
-                logging.info("Target not in range, skipping track (%s: %s)", newHexId, targetDist)
+            inRange = None
+            if altitude:
+                targetDist = rx.slantDistanceNM(msg['lat'], msg['lon'], altitude)
+                if targetDist > options['distance']:
+                    inRange = False
+                    logging.info("Target not in range, skipping track (%s: %s)", newHexId, targetDist)
+                else:
+                    inRange = True
 
             if altitude and inRange:
                 if len(currentTracks[newHexId]) <= 1:
