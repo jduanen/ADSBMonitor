@@ -268,10 +268,12 @@ def run(options):
 
             inRange = None
             if altitude:
-                if not isinstance(altitude, float):
+                if not isinstance(altitude, int):
                     print(f"ALT: '{altitude}'")
                     logging.error("Bad Altitude")
                     return
+                if altitude < 0:
+                    altitude = 0
                 targetDist = rx.slantDistanceNM(msg['lat'], msg['lon'], altitude)
                 if targetDist > options['distance']:
                     inRange = False
