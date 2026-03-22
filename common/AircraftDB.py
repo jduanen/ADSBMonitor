@@ -21,6 +21,7 @@
 #    - T: Turbine
 
 import csv
+import logging
 
 
 class AircraftDB:
