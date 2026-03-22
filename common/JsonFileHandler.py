@@ -25,11 +25,7 @@ class JsonFileHandler(FileSystemEventHandler):
 
     def on_created(self, event):
         self.lastChanged = time.time()
-        #### TODO can I remove this test?
-        if event.is_directory is False:
-            self.readJson()
-        else:  #### TMP TMP TMP
-            logging.error("Event is directory")
+        self.readJson()
 
     def readJson(self):
         try:
@@ -48,6 +44,6 @@ class JsonFileHandler(FileSystemEventHandler):
             logging.error("Ill-formed file, missing keys: %s", missingKeys)
         else:
             numMsgs = len(data['aircraft'])
-            for msg in data['aircraft']:
+            for indx, msg in enumerate(data['aircraft']):
                 self.tracksObj.addMessage(data['now'], msg)
-                self.addedMessage(msg['hex'], self.tracksObj.tracks)
+                self.addedMessage(msg['hex'], self.tracksObj.tracks, (indx + 1) >= numMsgs)
