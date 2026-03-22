@@ -5,16 +5,6 @@
 #
 # N.B. options precedence order: cmd line -> conf file -> defaults
 #
-# MQTT publish topics:
-#  * publishServiceDiscoveryMsg:          "homeassistant/binary_sensor/adsb_monitor/status/config"
-#  * publishServiceStateMsg:              "adsb/monitor/status"
-#  * publishTrackDiscoveryMsg:            f"homeassistant/sensor/adsb_{message['hex']}/config"
-#  * publishNullTrackDiscoveryMsg:        f"homeassistant/sensor/adsb_{message['hex']}/config"
-#  * publishTrackUpdateMsg:               f"adsb/vehicles/{message['hex']}/state"
-#  * publishTracksCountDiscoveryMsg:      "homeassistant/sensor/adsb_monitor/count/config"
-#  * publishNullTracksCountDiscoveryMsg:  "homeassistant/sensor/adsb_monitor/count/config"
-#  * publishTracksCountUpdateMsg:         "adsb/monitor/count"
-#
 
 import argparse
 from collections import namedtuple
@@ -38,7 +28,6 @@ ADSB_MON_VERSION_PATCH = 0
 ADSB_MON_VERSION = f"{ADSB_MON_VERSION_MAJOR}.{ADSB_MON_VERSION_MINOR}.{ADSB_MON_VERSION_PATCH}"
 
 Position = namedtuple("Position", ["latitude", "longitude", "altitude"], defaults=[None, None, None])
-FilterConstraints = namedtuple("FilterConstraints", ["min", "max"], defaults=[None, None])
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from AdsbMqtt import AdsbMqtt
@@ -61,8 +50,7 @@ AIRCRAFT_JSON_FILE = "aircraft.json"
 MQTT_CLIENT_ID = "adsb_vehicles"
 
 DEFAULTS = {
-    'altitude': FilterConstraints(),
-    'distance': FilterConstraints(),
+    'distance': 2.5,
     'interval': 60.0,
     'logFile': None,
     'logLevel': "WARNING",
@@ -73,7 +61,6 @@ DEFAULTS = {
     'mqttKeepalive': 60,  # 1min
     'name': "Home",
     'readHistory': False,
-    'slant': FilterConstraints(),
     'verbose': 0
 }
 
@@ -104,17 +91,14 @@ class ExitGracefully:
 def getOpts():
     ap = argparse.ArgumentParser()
     ap.add_argument(
-        "-a", "--altitude", metavar=["min", "max"], type=float, nargs=2,
-        help="Min/max vertical difference filter constraint (from receiver in Feet)")
-    ap.add_argument(
         "-b", "--mqttHost", action="store", type=str,
         help="Path to the configuration file")
     ap.add_argument(
         "-c", "--configFilePath", action="store", type=str,
         help="Path to the configuration YAML file")
     ap.add_argument(
-        "-D", "--distance", metavar=["min", "max"], type=float, nargs=2,
-        help="Min/max surface distance filter constraint (from receiver in NM)")
+        "-D", "--distance", action="store", type=float,
+        help="Max slant distance from receiver to target (in NM)")
     ap.add_argument(
         "-d", "--dbFilePath", action="store", type=str,
         help="Path to the plane database")
@@ -146,9 +130,6 @@ def getOpts():
     ap.add_argument(
         "-r", "--readHistory", action="store_true", default=False,
         help="Read history files on startup")
-    ap.add_argument(
-        "-s", "--slant", metavar=["min", "max"], type=float, nargs=2,
-        help="Min/max slant distance filter constraint (from receiver in NM)")
     ap.add_argument(
         "-u", "--mqttUsername", action="store", type=str,
         help="MQTT user name")
@@ -198,17 +179,9 @@ def getOpts():
     else:
         logging.basicConfig(level=c['logLevel'])
 
-    if all(c['distance']) and c['distance'].min  >= c['distance'].max:
-        logging.error("Invalid constraint: ground distance min %f >= max %f NM",
-                      c['distance'][0], c['distance'][1])
-        sys.exit(1)
-    if all(c['slant']) and c['slant'].min  >= c['slant'].max:
-        logging.error("Invalid constraint: slant distance min %f >= max %f NM",
-                      c['slant'][0], c['slant'][1])
-        sys.exit(1)
-    if all(c['altitude']) and c['altitude'].min  >= c['altitude'].max:
-        logging.error("Invalid constraint: vertical distance min %f >= max %f NM",
-                      c['altitude'][0], c['altitude'][1])
+    if c['distance'] < 0:
+        logging.error("Invalid distance, must be positive NMs (%f)",
+                      c['distance'])
         sys.exit(1)
 
     if 'adsbPath' not in c:
@@ -233,11 +206,7 @@ def run(options):
 
     homePosition = Position(options['position'][0], options['position'][1],
                             options['position'][2])
-    groundConstriants = FilterConstraints(options['distance'][0], options['distance'][1])
-    slantConstriants = FilterConstraints(options['slant'][0], options['slant'][1])
-    verticalConstriants = FilterConstraints(options['altitude'][0], options['altitude'][1])
-    rxSiteObj = ReceiverSite(options['name'], homePosition, slantConstriants,
-                             groundConstriants, verticalConstriants)
+    rxSiteObj = ReceiverSite(options['name'], homePosition, None, None, None)
                              
     if options['verbose'] > 1:
         repr(rxSiteObj)
@@ -270,21 +239,41 @@ def run(options):
 
     mqttClient.publishServiceDiscoveryMsg()
     mqttClient.publishTracksCountDiscoveryMsg()
-    logging.info("Published Service and Tracks Count discovery messages")
+    mqttClient.publishInRangeCountDiscoveryMsg()
+    logging.info("Published Service, TracksCount, and InRangeCount discovery messages")
 
     def createAddedMessageHandler(aircraftDatabase, receiverSite, mqttClient):
         ''' Returns a closure that captures instances of AircraftDB and ReceiverSite
              for use in dealing with a new ADS-B message
         '''
-        def addedMessage(newHexId, currentTracks):
+        def addedMessage(newHexId, currentTracks, lastMsg):
             ''' This is called whenever a new ADS-B message is added to a track
                 N.B. This is called after the message has been added to its Track
             '''
             acDB = aircraftDatabase
             rx = receiverSite
 
+            if lastMsg:
+                mqttClient.publishTracksCountUpdateMsg(len(currentTracks))
+
             msg = currentTracks[newHexId][-1]['msg']
             if not {'lat', 'lon'} <= msg.keys():
+                logging.debug("Message is missing lat or lon, skipping (%s)", newHexId)
+                return
+
+            if 'alt_geom' in msg and msg['alt_geom']:
+                altitude = msg['alt_geom']
+            elif 'alt_baro' in msg and msg['alt_baro']:
+                altitude = msg['alt_baro']
+            else:
+                logging.debug("Message is missing altitude field, skipping (%s)", newHexId)
+                return
+            targetDist = rx.slantDistanceNM(msg['lat'], msg['lon'], altitude)
+            if targetDist > options['distance']:
+                logging.debug("Target not in range, deleting track (%s: %s)", newHexId, targetDist)
+                del currentTracks[newHexId][-1]
+                if len(currentTracks[newHexId]) < 1:
+                    del currentTracks[newHexId]
                 return
 
             if len(currentTracks[newHexId]) <= 1:
@@ -295,9 +284,6 @@ def run(options):
                 trackName = currentTracks[newHexId][-1]['msg'].get('flight', newHexId)
                 mqttClient.publishTrackDiscoveryMsg(newHexId, trackName)
             mqttClient.publishTrackUpdateMsg(newHexId, msg)
-
-            numTracks = len(currentTracks)
-            mqttClient.publishTracksCountUpdateMsg(numTracks)
         return addedMessage
     addedMessageHandler = createAddedMessageHandler(aircraftDbObj, rxSiteObj, mqttClient)
 
