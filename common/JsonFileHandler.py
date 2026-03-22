@@ -45,8 +45,9 @@ class JsonFileHandler(FileSystemEventHandler):
                       datetime.fromtimestamp(time.time()), ts, len(data['aircraft']))
         missingKeys = {'now', 'messages', 'aircraft'} - data.keys()
         if missingKeys:
-            logging.error("Data is missing keys: %s", missingKeys)
+            logging.error("Ill-formed message, missing keys: %s", missingKeys)
         else:
-            for msg in data['aircraft']:
+            numMsgs = len(data['aircraft'])
+            for indx, msg in enumerate(data['aircraft']):
                 self.tracksObj.addMessage(data['now'], msg)
-                self.addedMessage(msg['hex'], self.tracksObj.tracks)
+                self.addedMessage(msg['hex'], self.tracksObj.tracks, (indx + 1) >= numMsgs)
