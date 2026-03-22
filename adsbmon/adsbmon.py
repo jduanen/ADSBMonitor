@@ -254,17 +254,17 @@ def run(options):
             rx = receiverSite
 
             msg = currentTracks[newHexId][-1]['msg']
+            altitude = None
             if not {'lat', 'lon'} <= msg.keys():
                 logging.debug("Message is missing lat or lon, skipping (%s)", newHexId)
-                return
-
-            if 'alt_geom' in msg and msg['alt_geom']:
-                altitude = msg['alt_geom']
-            elif 'alt_baro' in msg and msg['alt_baro']:
-                altitude = msg['alt_baro']
             else:
-                altitude = None
-                logging.debug("Message is missing altitude field, skipping (%s)", newHexId)
+                if 'alt_geom' in msg and msg['alt_geom']:
+                    altitude = msg['alt_geom']
+                elif 'alt_baro' in msg and msg['alt_baro']:
+                    altitude = msg['alt_baro']
+                else:
+                    altitude = None
+                    logging.debug("Message is missing altitude field, skipping (%s)", newHexId)
 
             inRange = None
             if altitude:
