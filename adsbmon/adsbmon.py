@@ -333,7 +333,7 @@ def run(options):
 
     tracksObj.removeAllTracks()
     mqttClient.publishTracksCountUpdateMsg(0)
-    mqttClient.publishInRangeCountDiscoveryMsg(0)
+    mqttClient.publishInRangeCountUpdateMsg(0)
     mqttClient.publishServiceStateMsg(False)
     logging.info("Published zero to Tracks and In-Range counts and Service state False @ %s",
                  datetime.fromtimestamp(time.time()))
