@@ -246,15 +246,12 @@ def run(options):
         ''' Returns a closure that captures instances of AircraftDB and ReceiverSite
              for use in dealing with a new ADS-B message
         '''
-        def addedMessage(newHexId, currentTracks, lastMsg):
+        def addedMessage(newHexId, currentTracks):
             ''' This is called whenever a new ADS-B message is added to a track
                 N.B. This is called after the message has been added to its Track
             '''
             acDB = aircraftDatabase
             rx = receiverSite
-
-            if lastMsg:
-                mqttClient.publishTracksCountUpdateMsg(len(currentTracks))
 
             msg = currentTracks[newHexId][-1]['msg']
             if not {'lat', 'lon'} <= msg.keys():
@@ -270,10 +267,7 @@ def run(options):
                 return
             targetDist = rx.slantDistanceNM(msg['lat'], msg['lon'], altitude)
             if targetDist > options['distance']:
-                logging.debug("Target not in range, deleting track (%s: %s)", newHexId, targetDist)
-                del currentTracks[newHexId][-1]
-                if len(currentTracks[newHexId]) < 1:
-                    del currentTracks[newHexId]
+                logging.info("Target not in range, skipping track (%s: %s)", newHexId, targetDist)
                 return
 
             if len(currentTracks[newHexId]) <= 1:
