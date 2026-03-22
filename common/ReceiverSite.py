@@ -3,6 +3,8 @@
 # Object that encapsulates information about the receiver site and provides
 #  functions for dealing with distance conversions and constraints.
 
+from collections import namedtuple
+import logging
 import math
 from pprint import pformat
 
@@ -14,6 +16,8 @@ METER_PER_NM = 1852.0
 KM_PER_NM = METER_PER_NM / 1000.0
 
 R_km = 6371.0088  # Earth radius in kilometers (mean)
+
+FilterConstraints = namedtuple("FilterConstraints", ["min", "max"], defaults=[None, None])
 
 
 WGS84 = Geodesic.WGS84
@@ -47,13 +51,22 @@ class ReceiverSite:
         return constraints
 
     def setGroundConstriants(self, constraints):
-        self.ground = constraints
+        if not isinstance(constraints, FilterConstraints):
+            logging.error("Must give FilterConstraints namedtuple")
+        else:
+            self.ground = constraints
 
     def setSlantConstriants(self, constraints):
-        self.slant = constraints
+        if not isinstance(constraints, FilterConstraints):
+            logging.error("Must give FilterConstraints namedtuple")
+        else:
+            self.slant = constraints
 
     def setVerticalConstriants(self, constraints):
-        self.vertical = constraints
+        if not isinstance(constraints, FilterConstraints):
+            logging.error("Must give FilterConstraints namedtuple")
+        else:
+            self.vertical = constraints
 
     @staticmethod
     def _haversineDistanceNM(lat1, lon1, lat2, lon2):
@@ -72,7 +85,7 @@ class ReceiverSite:
 
         d_km = R_km * c  # Distance in km
 
-        d_nm = d_km / KM_TO_NM
+        d_nm = d_km / KM_PER_NM
         return d_nm
 
     @staticmethod
@@ -84,21 +97,19 @@ class ReceiverSite:
         return meters / METER_PER_NM
 
     @staticmethod
-    def _groundDistanceNM(lat, lon):
-        return _geodesicDistanceNM(self.rxPos.latitude, self.rxPos.longitude, lat, lon)
-
-    @staticmethod
-    def _slantDistanceNM(lat, lon, alt):
-        altNM = alt / FEET_PER_NM
-        return math.sqrt((ReceiverSite._groundDistanceNM(lat, lon) ** 2) + (altNM ** 2))
-
-    @staticmethod
     def _withinConstraints(value, constraints):
         if constraints.min is not None and value < constraints.min:
             return False
         if constraints.max is not None and value > constraints.max:
             return False
         return True
+
+    def slantDistanceNM(self, lat, lon, alt):
+        altNM = alt / FEET_PER_NM
+        return math.sqrt((self.groundDistanceNM(lat, lon) ** 2) + (altNM ** 2))
+
+    def groundDistanceNM(self, lat, lon):
+        return ReceiverSite._geodesicDistanceNM(self.rxPos.latitude, self.rxPos.longitude, lat, lon)
 
     def surfaceDistanceToTarget(self, target):
         return ReceiverSite._geodesicDistanceNM(self.rxPos.latitude, self.rxPos.longitude,
