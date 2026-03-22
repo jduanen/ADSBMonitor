@@ -271,7 +271,7 @@ def run(options):
                 targetDist = rx.slantDistanceNM(msg['lat'], msg['lon'], altitude)
                 if targetDist > options['distance']:
                     inRange = False
-                    logging.info("Target not in range, skipping track (%s: %s)", newHexId, targetDist)
+                    logging.debug("Target not in range, skipping track (%s: %s)", newHexId, targetDist)
                 else:
                     inRange = True
 
