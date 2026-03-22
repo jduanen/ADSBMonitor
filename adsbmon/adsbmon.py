@@ -253,9 +253,6 @@ def run(options):
             acDB = aircraftDatabase
             rx = receiverSite
 
-            if lastMsg:
-                mqttClient.publishTracksCountUpdateMsg(len(currentTracks))
-
             msg = currentTracks[newHexId][-1]['msg']
             if not {'lat', 'lon'} <= msg.keys():
                 logging.debug("Message is missing lat or lon, skipping (%s)", newHexId)
@@ -266,21 +263,30 @@ def run(options):
             elif 'alt_baro' in msg and msg['alt_baro']:
                 altitude = msg['alt_baro']
             else:
+                altitude = None
                 logging.debug("Message is missing altitude field, skipping (%s)", newHexId)
-                return
+
+            inRange = True
             targetDist = rx.slantDistanceNM(msg['lat'], msg['lon'], altitude)
             if targetDist > options['distance']:
+                inRange = False
                 logging.info("Target not in range, skipping track (%s: %s)", newHexId, targetDist)
-                return
 
-            if len(currentTracks[newHexId]) <= 1:
-                planeInfo = acDB.getMappings(newHexId)
-                acType = planeInfo[2] if planeInfo[2] else "_"
-                acDesc = planeInfo[3] if planeInfo[3] else "_"
-                currentTracks[newHexId][-1]['msg']['state'] = f"{acType};{acDesc}"
-                trackName = currentTracks[newHexId][-1]['msg'].get('flight', newHexId)
-                mqttClient.publishTrackDiscoveryMsg(newHexId, trackName)
-            mqttClient.publishTrackUpdateMsg(newHexId, msg)
+            if altitude and inRange:
+                if len(currentTracks[newHexId]) <= 1:
+                    planeInfo = acDB.getMappings(newHexId)
+                    acType = planeInfo[2] if planeInfo[2] else "_"
+                    acDesc = planeInfo[3] if planeInfo[3] else "_"
+                    currentTracks[newHexId][-1]['msg']['state'] = f"{acType};{acDesc}"
+                    trackName = currentTracks[newHexId][-1]['msg'].get('flight', newHexId)
+                    mqttClient.publishTrackDiscoveryMsg(newHexId, trackName)
+                currentTracks[newHexId][-1]['msg']['dist'] = targetDist
+                mqttClient.publishTrackUpdateMsg(newHexId, msg)
+
+            if lastMsg:
+                inRangeTracks = [hexId for hexId, msgs in currentTracks.items() if dist in msgs[-1]['msg']]
+                mqttClient.publishInRangeCountUpdateMsg(len(inRangeTracks))
+                mqttClient.publishTracksCountUpdateMsg(len(currentTracks))
         return addedMessage
     addedMessageHandler = createAddedMessageHandler(aircraftDbObj, rxSiteObj, mqttClient)
 
