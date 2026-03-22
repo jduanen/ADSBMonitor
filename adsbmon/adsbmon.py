@@ -284,7 +284,7 @@ def run(options):
                 mqttClient.publishTrackUpdateMsg(newHexId, msg)
 
             if lastMsg:
-                inRangeTracks = [hexId for hexId, msgs in currentTracks.items() if dist in msgs[-1]['msg']]
+                inRangeTracks = [hexId for hexId, msgs in currentTracks.items() if 'dist' in msgs[-1]['msg']]
                 mqttClient.publishInRangeCountUpdateMsg(len(inRangeTracks))
                 mqttClient.publishTracksCountUpdateMsg(len(currentTracks))
         return addedMessage
