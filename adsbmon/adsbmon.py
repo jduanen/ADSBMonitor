@@ -39,7 +39,7 @@ from common.Tracks import Tracks
 import pdb  ## pdb.set_trace()
 
 
-STALE_TRACK_TIME = 58  # garbage collect records after 58secs
+STALE_TRACK_TIME = 28  # garbage collect records after this many secs
 
 FILE_UNCHANGED_TIMEOUT = 90  # throw exception if aircraft file doesn't change in 90 secs
 
@@ -246,7 +246,7 @@ def run(options):
         ''' Returns a closure that captures instances of AircraftDB and ReceiverSite
              for use in dealing with a new ADS-B message
         '''
-        def addedMessage(newHexId, currentTracks, lastMsg):
+        def addedMessage(newHexId, currentTracks, newTrack, lastMsg):
             ''' This is called whenever a new ADS-B message is added to a track
                 N.B. This is called after the message has been added to its Track
             '''
@@ -278,7 +278,7 @@ def run(options):
                     inRange = True
 
             if altitude and inRange:
-                if len(currentTracks[newHexId]) <= 1:
+                if newTrack:
                     planeInfo = acDB.getMappings(newHexId)
                     acType = planeInfo[2] if planeInfo[2] else "_"
                     acDesc = planeInfo[3] if planeInfo[3] else "_"

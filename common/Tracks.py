@@ -71,11 +71,14 @@ class Tracks:
 
     def addMessage(self, msgTime, msg):
         #### TODO implement filters
+        newTrack = False
         hexId = msg['hex']
         with self._lock:
             if hexId not in self.tracks:
                 self.tracks[hexId] = []
+                newTrack = True
             self.tracks[hexId].append({'msgTime': msgTime, 'msg': msg})
+        return newTrack
 
     def startGarbageCollect(self):
         self._restartTimer()

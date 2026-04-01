@@ -45,5 +45,5 @@ class JsonFileHandler(FileSystemEventHandler):
         else:
             numMsgs = len(data['aircraft'])
             for indx, msg in enumerate(data['aircraft']):
-                self.tracksObj.addMessage(data['now'], msg)
-                self.addedMessage(msg['hex'], self.tracksObj.tracks, (indx + 1) >= numMsgs)
+                newTrack = self.tracksObj.addMessage(data['now'], msg)
+                self.addedMessage(msg['hex'], self.tracksObj.tracks, newTrack, (indx + 1) >= numMsgs)
