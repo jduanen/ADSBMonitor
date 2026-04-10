@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Script to get all of the retained messages for sensors from the HomeAssistant broker
+# Script to print the retained messages for sensors from the HomeAssistant broker
 
 MQTT_USER=$1
 MQTT_PASSWD=$2
