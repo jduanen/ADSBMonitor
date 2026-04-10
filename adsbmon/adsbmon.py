@@ -252,7 +252,7 @@ def run(options):
             '''
             acDB = aircraftDatabase
             rx = receiverSite
-            newHexId =  = '_' + addedHexId.lstrip('~') if addedHexId.startswith('~') else addedHexId
+            newHexId = '_' + addedHexId.lstrip('~') if addedHexId.startswith('~') else addedHexId
 
             msg = currentTracks[newHexId][-1]['msg']
             altitude = None
