@@ -246,12 +246,13 @@ def run(options):
         ''' Returns a closure that captures instances of AircraftDB and ReceiverSite
              for use in dealing with a new ADS-B message
         '''
-        def addedMessage(newHexId, currentTracks, newTrack, lastMsg):
+        def addedMessage(addedHexId, currentTracks, newTrack, lastMsg):
             ''' This is called whenever a new ADS-B message is added to a track
                 N.B. This is called after the message has been added to its Track
             '''
             acDB = aircraftDatabase
             rx = receiverSite
+            newHexId =  = '_' + addedHexId.lstrip('~') if addedHexId.startswith('~') else addedHexId
 
             msg = currentTracks[newHexId][-1]['msg']
             altitude = None
