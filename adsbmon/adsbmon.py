@@ -252,12 +252,12 @@ def run(options):
             '''
             acDB = aircraftDatabase
             rx = receiverSite
-            newHexId = '_' + addedHexId.lstrip('~') if addedHexId.startswith('~') else addedHexId
+            #newHexId = '_' + addedHexId.lstrip('~') if addedHexId.startswith('~') else addedHexId
 
-            msg = currentTracks[newHexId][-1]['msg']
+            msg = currentTracks[addedHexId][-1]['msg']
             altitude = None
             if not {'lat', 'lon'} <= msg.keys():
-                logging.debug("Message is missing lat or lon, skipping (%s)", newHexId)
+                logging.debug("Message is missing lat or lon, skipping (%s)", addedHexId)
             else:
                 if 'alt_geom' in msg and msg['alt_geom']:
                     altitude = msg['alt_geom']
@@ -265,7 +265,7 @@ def run(options):
                     altitude = msg['alt_baro']
                 else:
                     altitude = None
-                    logging.debug("Message is missing altitude field, skipping (%s)", newHexId)
+                    logging.debug("Message is missing altitude field, skipping (%s)", addedHexId)
 
             inRange = None
             if altitude:
@@ -274,20 +274,20 @@ def run(options):
                 targetDist = rx.slantDistanceNM(msg['lat'], msg['lon'], altitude)
                 if targetDist > options['distance']:
                     inRange = False
-                    logging.debug("Target not in range, skipping track (%s: %s)", newHexId, targetDist)
+                    logging.debug("Target not in range, skipping track (%s: %s)", addedHexId, targetDist)
                 else:
                     inRange = True
 
             if altitude and inRange:
                 if newTrack:
-                    planeInfo = acDB.getMappings(newHexId)
+                    planeInfo = acDB.getMappings(addedHexId)
                     acType = planeInfo[2] if planeInfo[2] else "_"
                     acDesc = planeInfo[3] if planeInfo[3] else "_"
-                    currentTracks[newHexId][-1]['msg']['state'] = f"{acType};{acDesc}"
-                    trackName = currentTracks[newHexId][-1]['msg'].get('flight', newHexId)
-                    mqttClient.publishTrackDiscoveryMsg(newHexId, trackName)
-                currentTracks[newHexId][-1]['msg']['dist'] = targetDist
-                mqttClient.publishTrackUpdateMsg(newHexId, msg)
+                    currentTracks[addedHexId][-1]['msg']['state'] = f"{acType};{acDesc}"
+                    trackName = currentTracks[addedHexId][-1]['msg'].get('flight', addedHexId)
+                    mqttClient.publishTrackDiscoveryMsg(addedHexId, trackName)
+                currentTracks[addedHexId][-1]['msg']['dist'] = targetDist
+                mqttClient.publishTrackUpdateMsg(addedHexId, msg)
 
             if lastMsg:
                 inRangeTracks = [hexId for hexId, msgs in currentTracks.items() if 'dist' in msgs[-1]['msg']]
