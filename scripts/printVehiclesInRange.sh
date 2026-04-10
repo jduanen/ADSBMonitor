@@ -4,7 +4,7 @@
 
 MQTT_USER=$1
 MQTT_PASSWD=$2
-OPTIONS=$3  # e.g., '-v'
+OPTIONS=$3  # e.g., '-v' to print the topic
 
 if [ $# -lt 2 ]; then
     echo "Usage: $0 <mqttUser> <mqttPassword> {<options>}"
