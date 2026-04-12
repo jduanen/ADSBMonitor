@@ -11,7 +11,6 @@
 #     - msg: <adsbMsg>
 #   ...
 
-import copy
 import json
 import logging
 import sys
@@ -67,19 +66,22 @@ class Tracks:
                 if not seen:
                     continue
                 lastSeenTime = message['msgTime'] - seen
-                now = time.time()
-                if (now - lastSeenTime) > self.staleTime:
+                if (time.time() - lastSeenTime) > self.staleTime:
                     staleHexIds.append(hexId)
-        self._removeTracks(staleHexIds)
+                    del self.tracks[hexId]
+        for hexId in staleHexIds:
+            self.staleTrackHandler(hexId)
+            logging.info("Delete: %s", hexId)
         self._startTimer()
 
     def updateTrack(self, msgTime, msg):
         hexId = msg['hex']
         with self._lock:
             if hexId not in self.tracks:
-                self.tracks[hexId] = {}
-            self.tracks[hexId]['msgTime'] = msgTime
-            self.tracks[hexId]['msg'] |= msg
+                self.tracks[hexId] = {'msgTime': msgTime, 'msg': msg}
+            else:
+                self.tracks[hexId]['msgTime'] = msgTime
+                self.tracks[hexId]['msg'] |= msg
 
     def lastMessageTime(self, hexId):
         with self._lock:
@@ -97,10 +99,12 @@ class Tracks:
         return len(self.tracks)
 
     def removeAllTracks(self):
-        while self.tracks:
-            with self._lock:
-                allHexIds = list(self.tracks.keys())
-            self._removeTracks(allHexIds)
+        with self._lock:
+            hexIds = list(self.tracks.keys())
+            self.tracks.clear()
+        for hexId in hexIds:
+            self.staleTrackHandler(hexId)
+            logging.info("Delete: %s", hexId)
 
     def printAll(self):
         json.dump(self.tracks, sys.stdout, indent=4, sort_keys=True)
