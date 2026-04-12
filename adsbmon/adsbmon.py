@@ -247,7 +247,6 @@ def run(options):
                  written to the log file.
             '''
             msgTime = data['now']
-            inRangeTrackIds = []
             for msg in data['aircraft']:
                 if not {'lat', 'lon'} <= msg.keys():
                     logging.debug("Message is missing lat or lon, skipping (%s)", msg['hex'])
@@ -264,11 +263,7 @@ def run(options):
 
                 targetDist = receiverSite.groundDistanceNM(msg['lat'], msg['lon'])
                 msg['dist'] = targetDist
-                if targetDist > options['distance']:
-                    logging.debug("Target not in range, skipping track (%s: %s)", msg['hex'], targetDist)
-                    inRange = False
-                else:
-                    inRange = True
+                inRange = targetDist <= options['distance']
 
                 if tracksObj.lastMessageTime(msg['hex']) is None:
                     planeInfo = aircraftDatabase.getMappings(msg['hex'])
@@ -281,9 +276,11 @@ def run(options):
                         mqttClient.publishTrackDiscoveryMsg(msg['hex'], trackName)
                     #### TODO think about a delay here for the discovery to take place?
 
-                tracksObj.updateTrack(inRange, msgTime, msg)
                 if inRange:
+                    tracksObj.updateTrack(inRange, msgTime, msg)
                     mqttClient.publishTrackUpdateMsg(msg['hex'], msg)
+                else:
+                    tracksObj.removeTrack(msg['hex'])
 
             mqttClient.publishInRangeCountUpdateMsg(len(tracksObj.inRangeTrackIds()))
             mqttClient.publishTracksCountUpdateMsg(tracksObj.numberOfTracks())
