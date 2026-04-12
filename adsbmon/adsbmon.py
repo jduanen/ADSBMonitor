@@ -262,32 +262,9 @@ def run(options):
                         logging.debug("Message is missing altitude field, skipping (%s)", msg['hex'])
                         continue
                 altitude = 0 if altitude == 'ground' else altitude
-=======
-        def addedMessage(addedHexId, currentTracks, newTrack, lastMsg):
-            ''' This is called whenever a new ADS-B message is added to a track
-                N.B. This is called after the message has been added to its Track
-            '''
-            acDB = aircraftDatabase
-            rx = receiverSite
-            #newHexId = '_' + addedHexId.lstrip('~') if addedHexId.startswith('~') else addedHexId
-
-            msg = currentTracks[addedHexId][-1]['msg']
-            altitude = None
-            if not {'lat', 'lon'} <= msg.keys():
-                logging.debug("Message is missing lat or lon, skipping (%s)", addedHexId)
-            else:
-                if 'alt_geom' in msg and msg['alt_geom']:
-                    altitude = msg['alt_geom']
-                elif 'alt_baro' in msg and msg['alt_baro']:
-                    altitude = msg['alt_baro']
-                else:
-                    altitude = None
-                    logging.debug("Message is missing altitude field, skipping (%s)", addedHexId)
->>>>>>> 28816bdd7dfd7044601bdb5cee837ee2218f48a7
 
                 targetDist = receiverSite.groundDistanceNM(msg['lat'], msg['lon'])
                 if targetDist > options['distance']:
-<<<<<<< HEAD
                     logging.debug("Target not in range, skipping track (%s: %s)", msg['hex'], targetDist)
                     continue
                 msg['dist'] = targetDist
@@ -297,23 +274,6 @@ def run(options):
                     acType = planeInfo[2] if planeInfo[2] else "_"
                     acDesc = planeInfo[3] if planeInfo[3] else "_"
                     msg['state'] = f"{acType};{acDesc}"
-=======
-                    inRange = False
-                    logging.debug("Target not in range, skipping track (%s: %s)", addedHexId, targetDist)
-                else:
-                    inRange = True
-
-            if altitude and inRange:
-                if newTrack:
-                    planeInfo = acDB.getMappings(addedHexId)
-                    acType = planeInfo[2] if planeInfo[2] else "_"
-                    acDesc = planeInfo[3] if planeInfo[3] else "_"
-                    currentTracks[addedHexId][-1]['msg']['state'] = f"{acType};{acDesc}"
-                    trackName = currentTracks[addedHexId][-1]['msg'].get('flight', addedHexId)
-                    mqttClient.publishTrackDiscoveryMsg(addedHexId, trackName)
-                currentTracks[addedHexId][-1]['msg']['dist'] = targetDist
-                mqttClient.publishTrackUpdateMsg(addedHexId, msg)
->>>>>>> 28816bdd7dfd7044601bdb5cee837ee2218f48a7
 
                     trackName = msg.get('flight', msg['hex'])
                     mqttClient.publishTrackDiscoveryMsg(msg['hex'], trackName)
