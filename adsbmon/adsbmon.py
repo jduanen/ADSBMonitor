@@ -242,7 +242,6 @@ def run(options):
         ''' Returns a closure that captures instances of objects needed by the callback
              for use in dealing with new ADS-B messages
         '''
-<<<<<<< HEAD
         def newMessages(data):
             ''' Function that gets called each time a new list of messages is
                  written to the log file.
