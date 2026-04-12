@@ -4,11 +4,17 @@
 #
 # tracks
 #   - <hexId>
+#     - inRange: <bool>
 #     - msgTime: <time>
 #     - msg: <adsbMsg>
+#       * hex: <hexId>
+#       ...
 #   - <hexId>
+#     - inRange: <bool>
 #     - msgTime: <time>
 #     - msg: <adsbMsg>
+#       * hex: <hexId>
+#       ...
 #   ...
 
 import json
@@ -74,12 +80,13 @@ class Tracks:
             logging.info("Delete: %s", hexId)
         self._startTimer()
 
-    def updateTrack(self, msgTime, msg):
+    def updateTrack(self, inRange, msgTime, msg):
         hexId = msg['hex']
         with self._lock:
             if hexId not in self.tracks:
-                self.tracks[hexId] = {'msgTime': msgTime, 'msg': msg}
+                self.tracks[hexId] = {'inRange': inRange, 'msgTime': msgTime, 'msg': msg}
             else:
+                self.tracks[hexId]['inRange'] = inRange
                 self.tracks[hexId]['msgTime'] = msgTime
                 self.tracks[hexId]['msg'] |= msg
 
@@ -97,6 +104,11 @@ class Tracks:
 
     def numberOfTracks(self):
         return len(self.tracks)
+
+    def inRangeTrackIds(self):
+        with self._lock:
+            inRange = [track['hex'] for track in self.tracks if track['inRange']]
+        return inRange
 
     def removeAllTracks(self):
         with self._lock:
