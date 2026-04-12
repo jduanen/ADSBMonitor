@@ -44,3 +44,4 @@ class JsonFileHandler(FileSystemEventHandler):
             logging.error("Ill-formed file, missing keys: %s", missingKeys)
             return
         self.newMessages(data)
+
