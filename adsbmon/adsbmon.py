@@ -277,7 +277,8 @@ def run(options):
                     msg['state'] = f"{acType};{acDesc}"
 
                     trackName = msg.get('flight', msg['hex'])
-                    mqttClient.publishTrackDiscoveryMsg(msg['hex'], trackName)
+                    if inRange:
+                        mqttClient.publishTrackDiscoveryMsg(msg['hex'], trackName)
                     #### TODO think about a delay here for the discovery to take place?
 
                 tracksObj.updateTrack(inRange, msgTime, msg)
