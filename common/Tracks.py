@@ -107,7 +107,7 @@ class Tracks:
 
     def inRangeTrackIds(self):
         with self._lock:
-            inRange = [track['hex'] for track in self.tracks if track['inRange']]
+            inRange = [hexId for hexId, track in self.tracks.items() if track['inRange']]
         return inRange
 
     def removeAllTracks(self):
