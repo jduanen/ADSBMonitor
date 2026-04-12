@@ -57,13 +57,6 @@ class Tracks:
         if self._timer:
             self._timer.cancel()
 
-    def _removeTracks(self, hexIds):
-        for hexId in hexIds:
-            with self._lock:
-                self.tracks.pop(hexId, None)
-            self.staleTrackHandler(hexId)
-            logging.info("Delete: %s", hexId)
-
     def _garbageCollect(self):
         staleHexIds = []
         with self._lock:
@@ -110,13 +103,19 @@ class Tracks:
             inRange = [hexId for hexId, track in self.tracks.items() if track['inRange']]
         return inRange
 
+    def removeTrack(self, hexId):
+        with self._lock:
+            self.tracks.pop(hexId, None)
+            self.staleTrackHandler(hexId)
+            logging.info("remove: %s", hexId)
+
     def removeAllTracks(self):
         with self._lock:
             hexIds = list(self.tracks.keys())
             self.tracks.clear()
         for hexId in hexIds:
             self.staleTrackHandler(hexId)
-            logging.info("Delete: %s", hexId)
+            logging.info("Remove: %s", hexId)
 
     def printAll(self):
         json.dump(self.tracks, sys.stdout, indent=4, sort_keys=True)
