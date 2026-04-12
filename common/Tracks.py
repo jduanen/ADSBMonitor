@@ -98,6 +98,11 @@ class Tracks:
     def numberOfTracks(self):
         return len(self.tracks)
 
+    def isInRange(self, hexId):
+        if hexId not in self.tracks:
+            return None
+        return self.tracks[hexId]['inRange']
+
     def inRangeTrackIds(self):
         with self._lock:
             inRange = [hexId for hexId, track in self.tracks.items() if track['inRange']]
