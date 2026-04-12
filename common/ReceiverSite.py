@@ -24,13 +24,13 @@ WGS84 = Geodesic.WGS84
 
 
 class ReceiverSite:
-    def __init__(self, name, rxPosition, groundConstriants, slantConstriants,
-                 verticalConstriants):
+    def __init__(self, name, rxPosition, groundConstraints, slantConstraints,
+                 verticalConstraints):
         self.nameRx = name
         self.rxPos = rxPosition
-        self.ground = groundConstriants
-        self.slant = slantConstriants
-        self.vertical = verticalConstriants
+        self.ground = groundConstraints
+        self.slant = slantConstraints
+        self.vertical = verticalConstraints
 
     def __repr__(self):
         state = {
@@ -50,19 +50,19 @@ class ReceiverSite:
         }
         return constraints
 
-    def setGroundConstriants(self, constraints):
+    def setGroundConstraints(self, constraints):
         if not isinstance(constraints, FilterConstraints):
             logging.error("Must give FilterConstraints namedtuple")
         else:
             self.ground = constraints
 
-    def setSlantConstriants(self, constraints):
+    def setSlantConstraints(self, constraints):
         if not isinstance(constraints, FilterConstraints):
             logging.error("Must give FilterConstraints namedtuple")
         else:
             self.slant = constraints
 
-    def setVerticalConstriants(self, constraints):
+    def setVerticalConstraints(self, constraints):
         if not isinstance(constraints, FilterConstraints):
             logging.error("Must give FilterConstraints namedtuple")
         else:
