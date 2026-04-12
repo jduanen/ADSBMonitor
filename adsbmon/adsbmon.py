@@ -198,7 +198,7 @@ def run(options):
     stopEvent = threading.Event()
     ExitGracefully(stopEvent)
 
-    if options['verbose'] > 1:
+    if (options['verbose'] or 0) > 1:
         json.dump(options, sys.stdout, indent=4, sort_keys=True)
         print("")
 
@@ -229,7 +229,7 @@ def run(options):
             mqttClient.publishNullTrackDiscoveryMsg(staleHexId)
         return staleTrack
 
-    staleTrackHandler = createStaleTrackHandler(aircraftDbObj, rxSiteObj, mqttClient)
+    staleTrackHandler = createStaleTrackHandler(mqttClient)
 
     tracksObj = Tracks(aircraftDbObj, rxSiteObj, STALE_TRACK_TIME, staleTrackHandler)
 
@@ -265,7 +265,7 @@ def run(options):
                 targetDist = receiverSite.groundDistanceNM(msg['lat'], msg['lon'])
                 if targetDist > options['distance']:
                     logging.debug("Target not in range, skipping track (%s: %s)", msg['hex'], targetDist)
-                    return
+                    continue
                 msg['dist'] = targetDist
 
                 if tracksObj.lastMessageTime(msg['hex']) is None:
