@@ -284,6 +284,7 @@ def run(options):
 
             mqttClient.publishInRangeCountUpdateMsg(len(inRangeTrackIds))
             mqttClient.publishTracksCountUpdateMsg(tracksObj.numberOfTracks())
+        return newMessages
 
     newMessagesHandler = createNewMessagesHandler(aircraftDbObj, rxSiteObj, tracksObj, mqttClient)
 
