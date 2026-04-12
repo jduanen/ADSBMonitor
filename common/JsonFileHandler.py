@@ -12,10 +12,9 @@ from watchdog.events import FileSystemEventHandler
 
 
 class JsonFileHandler(FileSystemEventHandler):
-    def __init__(self, filePath, tracksObj, addedMessageHandler):
+    def __init__(self, filePath, newMessagesHandler):
         self.filePath = filePath
-        self.tracksObj = tracksObj
-        self.addedMessage = addedMessageHandler
+        self.newMessages = newMessagesHandler
         self.lastChanged = time.time()
 
     '''
@@ -36,14 +35,12 @@ class JsonFileHandler(FileSystemEventHandler):
                 return
         except Exception as e:
             logging.error("Failed to read '%s': %s", self.filePath, e)
+            return
         ts = datetime.fromtimestamp(data['now'])
         logging.debug("aircraft file updated @ %s; data['now']=%s; # msgs: %d",
                       datetime.fromtimestamp(time.time()), ts, len(data['aircraft']))
         missingKeys = {'now', 'messages', 'aircraft'} - data.keys()
         if missingKeys:
             logging.error("Ill-formed file, missing keys: %s", missingKeys)
-        else:
-            numMsgs = len(data['aircraft'])
-            for indx, msg in enumerate(data['aircraft']):
-                self.tracksObj.addMessage(data['now'], msg)
-                self.addedMessage(msg['hex'], self.tracksObj.tracks, (indx + 1) >= numMsgs)
+            return
+        self.newMessages(data)
