@@ -11,6 +11,7 @@
 #     - msg: <adsbMsg>
 #   ...
 
+import copy
 import json
 import logging
 import sys
@@ -51,6 +52,13 @@ class Tracks:
         if self._timer:
             self._timer.cancel()
 
+    def _removeTracks(self, hexIds):
+        for hexId in hexIds:
+            self.staleTrackHandler(hexId)
+            with self._lock:
+                self.tracks.pop(hexId, None)
+            logging.info("Delete: %s", hexId)
+
     def _garbageCollect(self):
         staleHexIds = []
         with self._lock:
@@ -63,19 +71,21 @@ class Tracks:
                 now = time.time()
                 if (now - lastSeenTime) > self.staleTime:
                     staleHexIds.append(hexId)
-            for hexId in staleHexIds:
-                self.staleTrackHandler(hexId, self.tracks)
-                self.tracks.pop(hexId, None)
-                logging.info("Delete: %s", hexId)
-        self._restartTimer()
+        self._removeTracks(staleHexIds)
+        self._startTimer()
 
-    def addMessage(self, msgTime, msg):
-        #### TODO implement filters
+    def updateTrack(self, msgTime, msg):
         hexId = msg['hex']
         with self._lock:
             if hexId not in self.tracks:
-                self.tracks[hexId] = []
-            self.tracks[hexId].append({'msgTime': msgTime, 'msg': msg})
+                self.tracks[hexId] = {}
+            self.tracks[hexId] |= {'msgTime': msgTime, 'msg': msg}
+
+    def lastMessageTime(self, hexId):
+        with self._lock:
+            if hexId not in self.tracks:
+                return None
+            return self.tracks[hexId]['msgTime']
 
     def startGarbageCollect(self):
         self._restartTimer()
@@ -87,11 +97,10 @@ class Tracks:
         return len(self.tracks)
 
     def removeAllTracks(self):
-        hexIds = list(self.tracks.keys())
-        for hexId in hexIds:
-            self.staleTrackHandler(hexId, self.tracks)
-            self.tracks.pop(hexId)
-            logging.info("Delete: %s", hexId)
+        while self.tracks:
+            with self._lock:
+                allHexIds = list(self.tracks.keys())
+                self._removeTracks(allHexIds)
 
     def printAll(self):
         json.dump(self.tracks, sys.stdout, indent=4, sort_keys=True)
