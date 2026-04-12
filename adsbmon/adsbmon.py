@@ -61,7 +61,7 @@ DEFAULTS = {
     'mqttKeepalive': 60,  # 1min
     'name': "Home",
     'readHistory': False,
-    'verbose': 0
+    'verbose': None
 }
 
 
@@ -208,7 +208,7 @@ def run(options):
                             options['position'][2])
     rxSiteObj = ReceiverSite(options['name'], homePosition, None, None, None)
                              
-    if options['verbose'] > 1:
+    if (options['verbose'] or 0) > 1:
         repr(rxSiteObj)
 
     mqttClient = AdsbMqtt(MQTT_CLIENT_ID,
