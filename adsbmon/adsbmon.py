@@ -280,7 +280,9 @@ def run(options):
                     tracksObj.updateTrack(inRange, msgTime, msg)
                     mqttClient.publishTrackUpdateMsg(msg['hex'], msg)
                 else:
-                    tracksObj.removeTrack(msg['hex'])
+                    if tracksObj.isInRange(msg['hex']):
+                        # was in range, now is not, so remove the track
+                        tracksObj.removeTrack(msg['hex'])
 
             mqttClient.publishInRangeCountUpdateMsg(len(tracksObj.inRangeTrackIds()))
             mqttClient.publishTracksCountUpdateMsg(tracksObj.numberOfTracks())
