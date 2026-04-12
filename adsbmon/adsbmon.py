@@ -170,7 +170,7 @@ def getOpts():
             c[opt] = conf['defaults'][opt]
         else:
             c[opt] = None
-    if c['verbose'] > 1:
+    if (c['verbose'] or 0) > 1:
         json.dump(conf, sys.stdout, indent=4, sort_keys=True)
         print("")
 
@@ -218,21 +218,17 @@ def run(options):
     if not mqttClient:
         sys.exit(1)
 
-    def createStaleTrackHandler(aircraftDatabase, receiverSite, mqttClient):
-        ''' Returns a closure that captures instances of AircraftDB and ReceiverSite
-             for use in dealing with a stale track that is to be garbage collected
+    def createStaleTrackHandler(mqttClient):
+        ''' Returns a closure that captures the mqttClient instance for use in
+             dealing with a stale track that is to be garbage collected
         '''
-        def staleTrack(staleHexId, currentTracks):
+        def staleTrack(staleHexId):
             ''' Called whenever a stale track is to be deleted
                 N.B. This is called before the track is deleted
             '''
-            acDB = aircraftDatabase
-            rx = receiverSite
-            mC = mqttClient
-
             mqttClient.publishNullTrackDiscoveryMsg(staleHexId)
-            print(f"stale Track: {staleHexId} #{len(currentTracks)}")  #### TMP TMP TMP
         return staleTrack
+
     staleTrackHandler = createStaleTrackHandler(aircraftDbObj, rxSiteObj, mqttClient)
 
     tracksObj = Tracks(aircraftDbObj, rxSiteObj, STALE_TRACK_TIME, staleTrackHandler)
@@ -242,58 +238,54 @@ def run(options):
     mqttClient.publishInRangeCountDiscoveryMsg()
     logging.info("Published Service, TracksCount, and InRangeCount discovery messages")
 
-    def createAddedMessageHandler(aircraftDatabase, receiverSite, mqttClient):
-        ''' Returns a closure that captures instances of AircraftDB and ReceiverSite
-             for use in dealing with a new ADS-B message
+    def createNewMessagesHandler(aircraftDatabase, receiverSite, tracksObj, mqttClient):
+        ''' Returns a closure that captures instances of objects needed by the callback
+             for use in dealing with new ADS-B messages
         '''
-        def addedMessage(newHexId, currentTracks, lastMsg):
-            ''' This is called whenever a new ADS-B message is added to a track
-                N.B. This is called after the message has been added to its Track
+        def newMessages(data):
+            ''' Function that gets called each time a new list of messages is
+                 written to the log file.
             '''
-            acDB = aircraftDatabase
-            rx = receiverSite
-
-            msg = currentTracks[newHexId][-1]['msg']
-            altitude = None
-            if not {'lat', 'lon'} <= msg.keys():
-                logging.debug("Message is missing lat or lon, skipping (%s)", newHexId)
-            else:
-                if 'alt_geom' in msg and msg['alt_geom']:
-                    altitude = msg['alt_geom']
-                elif 'alt_baro' in msg and msg['alt_baro']:
-                    altitude = msg['alt_baro']
+            msgTime = data['now']
+            inRangeTrackIds = []
+            for msg in data['aircraft']:
+                if not {'lat', 'lon'} <= msg.keys():
+                    logging.debug("Message is missing lat or lon, skipping (%s)", msg['hex'])
+                    continue
                 else:
-                    altitude = None
-                    logging.debug("Message is missing altitude field, skipping (%s)", newHexId)
+                    if 'alt_geom' in msg and msg['alt_geom']:
+                        altitude = msg['alt_geom']
+                    elif 'alt_baro' in msg and msg['alt_baro']:
+                        altitude = msg['alt_baro']
+                    else:
+                        logging.debug("Message is missing altitude field, skipping (%s)", msg['hex'])
+                        continue
+                altitude = 0 if altitude == 'ground' else altitude
 
-            inRange = None
-            if altitude:
-                if altitude == 'ground':
-                    altitude = 0
-                targetDist = rx.slantDistanceNM(msg['lat'], msg['lon'], altitude)
+                targetDist = receiverSite.groundDistanceNM(msg['lat'], msg['lon'])
                 if targetDist > options['distance']:
-                    inRange = False
-                    logging.debug("Target not in range, skipping track (%s: %s)", newHexId, targetDist)
-                else:
-                    inRange = True
+                    logging.debug("Target not in range, skipping track (%s: %s)", msg['hex'], targetDist)
+                    return
+                msg['dist'] = targetDist
 
-            if altitude and inRange:
-                if len(currentTracks[newHexId]) <= 1:
-                    planeInfo = acDB.getMappings(newHexId)
+                if tracksObj.lastMessageTime(msg['hex']) is None:
+                    planeInfo = aircraftDatabase.getMappings(msg['hex'])
                     acType = planeInfo[2] if planeInfo[2] else "_"
                     acDesc = planeInfo[3] if planeInfo[3] else "_"
-                    currentTracks[newHexId][-1]['msg']['state'] = f"{acType};{acDesc}"
-                    trackName = currentTracks[newHexId][-1]['msg'].get('flight', newHexId)
-                    mqttClient.publishTrackDiscoveryMsg(newHexId, trackName)
-                currentTracks[newHexId][-1]['msg']['dist'] = targetDist
-                mqttClient.publishTrackUpdateMsg(newHexId, msg)
+                    msg['state'] = f"{acType};{acDesc}"
 
-            if lastMsg:
-                inRangeTracks = [hexId for hexId, msgs in currentTracks.items() if 'dist' in msgs[-1]['msg']]
-                mqttClient.publishInRangeCountUpdateMsg(len(inRangeTracks))
-                mqttClient.publishTracksCountUpdateMsg(len(currentTracks))
-        return addedMessage
-    addedMessageHandler = createAddedMessageHandler(aircraftDbObj, rxSiteObj, mqttClient)
+                    trackName = msg.get('flight', msg['hex'])
+                    mqttClient.publishTrackDiscoveryMsg(msg['hex'], trackName)
+                    #### TODO think about a delay here for the discovery to take place?
+
+                tracksObj.updateTrack(msgTime, msg)
+                mqttClient.publishTrackUpdateMsg(msg['hex'], msg)
+                inRangeTrackIds.append(msg['hex'])
+
+            mqttClient.publishInRangeCountUpdateMsg(len(inRangeTrackIds))
+            mqttClient.publishTracksCountUpdateMsg(tracksObj.numberOfTracks())
+
+    newMessagesHandler = createNewMessagesHandler(aircraftDbObj, rxSiteObj, tracksObj, mqttClient)
 
     dumpDir = Path(options['adsbPath'])
 
@@ -321,7 +313,7 @@ def run(options):
 
     observer = PollingObserver()
     aircraftJsonPath = dumpDir / AIRCRAFT_JSON_FILE
-    handler = JsonFileHandler(aircraftJsonPath, tracksObj, addedMessageHandler)
+    handler = JsonFileHandler(aircraftJsonPath, newMessagesHandler)
     observer.schedule(handler, path=str(aircraftJsonPath), recursive=False)
     observer.start()
     logging.debug("Watching %s...", str(aircraftJsonPath))
