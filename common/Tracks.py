@@ -61,7 +61,7 @@ class Tracks:
     def _garbageCollect(self):
         staleHexIds = []
         with self._lock:
-            for hexId, message in self.tracks.items():
+            for hexId, message in list(self.tracks.items()):
                 seen = message['msg'].get('seen', None)
                 if not seen:
                     continue
