@@ -265,7 +265,7 @@ def run(options):
                 msg['dist'] = targetDist
                 inRange = targetDist <= options['distance']
 
-                if tracksObj.lastMessageTime(msg['hex']) is None:
+                if not tracksObj.trackExists(msg['hex']):
                     planeInfo = aircraftDatabase.getMappings(msg['hex'])
                     acType = planeInfo[2] if planeInfo[2] else "_"
                     acDesc = planeInfo[3] if planeInfo[3] else "_"
