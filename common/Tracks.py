@@ -101,7 +101,7 @@ class Tracks:
     def isInRange(self, hexId):
         with self._lock:
             track = self.tracks.get(hexId)
-            return track['inRange']
+            return track['inRange'] if track else None
 
     def inRangeTrackIds(self):
         with self._lock:
