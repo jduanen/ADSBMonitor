@@ -266,31 +266,25 @@ def run(options):
                 inRange = targetDist <= options['distance']
                 logging.info("%s in range: %s", msg['hex'], inRange)
 
-                if not tracksObj.trackExists(msg['hex']):
-                    planeInfo = aircraftDatabase.getMappings(msg['hex'])
-                    msg['acType'] = planeInfo[2] if planeInfo[2] else "_"
-                    msg['acDesc'] = planeInfo[3] if planeInfo[3] else "_"
-
-                    trackName = msg.get('flight', msg['hex'])
-                    logging.info("%s (%s) not tracked", trackName, msg['hex'])
-                    msg['trackName'] = trackName
-                    if inRange:
-                        mqttClient.publishTrackDiscoveryMsg(msg['hex'], trackName)
-                        time.sleep(0.1)  # delay to allow HA discovery to take place before updating
-
                 if inRange:
                     logging.info("%s is in range", msg['hex'])
-                    tracksObj.updateTrack(inRange, msgTime, msg)
+                    if not tracksObj.isInRange(msg['hex']):
+                        planeInfo = aircraftDatabase.getMappings(msg['hex'])
+                        msg['acType'] = planeInfo[2] if planeInfo[2] else "_"
+                        msg['acDesc'] = planeInfo[3] if planeInfo[3] else "_"
+
+                        trackName = msg.get('flight', msg['hex'])
+                        logging.info("%s (%s) was not in range before this", trackName, msg['hex'])
+                        msg['trackName'] = trackName
+                        mqttClient.publishTrackDiscoveryMsg(msg['hex'], trackName)
+                        time.sleep(0.1)  # delay to allow HA discovery to take place before updating
                     mqttClient.publishTrackUpdateMsg(msg['hex'], msg)
                 else:
+                    logging.info("%s not in range", msg['hex'])
                     if tracksObj.isInRange(msg['hex']):
-                        # was in range, now is not, so remove the track
-                        logging.info("%s was in range, but now is not", msg['hex'])
+                        logging.info("%s was in range before this, and now it's not", msg['hex'])
                         tracksObj.removeTrack(msg['hex'])  # staleHandler will send the null state update
-                    else:
-                        # still isn't in range, so update it
-                        logging.info("%s still in range", msg['hex'])
-                        tracksObj.updateTrack(inRange, msgTime, msg)
+                tracksObj.updateTrack(inRange, msgTime, msg)
 
             mqttClient.publishInRangeCountUpdateMsg(len(tracksObj.inRangeTrackIds()))
             mqttClient.publishTracksCountUpdateMsg(tracksObj.numberOfTracks())
