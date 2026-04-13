@@ -278,7 +278,7 @@ def run(options):
                         continue
                 altitude = 0 if altitude == 'ground' else altitude
 
-                targetDist = receiverSite.slantDistanceNM(msg['lat'], msg['lon']) if slant else receiverSite.groundDistanceNM(msg['lat'], msg['lon'])
+                targetDist = receiverSite.slantDistanceNM(msg['lat'], msg['lon'], altitude) if slant else receiverSite.groundDistanceNM(msg['lat'], msg['lon'])
                 msg['dist'] = targetDist
                 inRange = targetDist <= options['distance']
                 logging.info("%s in range: %s", msg['hex'], inRange)
