@@ -49,8 +49,10 @@ AIRCRAFT_JSON_FILE = "aircraft.json"
 
 MQTT_CLIENT_ID = "adsb_vehicles"
 
+MAX_DISTANCE = 100  # limit max possible distance to 100NM
+
 DEFAULTS = {
-    'distance': 2.5,
+    'slantDistance': 2.5,
     'interval': 60.0,
     'logFile': None,
     'logLevel': "WARNING",
@@ -97,8 +99,8 @@ def getOpts():
         "-c", "--configFilePath", action="store", type=str,
         help="Path to the configuration YAML file")
     ap.add_argument(
-        "-D", "--distance", action="store", type=float,
-        help="Max slant distance from receiver to target (in NM)")
+        "-g", "--groundDistance", action="store", type=float,
+        help="Max ground distance from receiver to target (in NM)")
     ap.add_argument(
         "-d", "--dbFilePath", action="store", type=str,
         help="Path to the plane database")
@@ -130,6 +132,9 @@ def getOpts():
     ap.add_argument(
         "-r", "--readHistory", action="store_true", default=False,
         help="Read history files on startup")
+    ap.add_argument(
+        "-s", "--slantDistance", action="store", type=float,
+        help="Max slant distance from receiver to target (in NM)")
     ap.add_argument(
         "-u", "--mqttUsername", action="store", type=str,
         help="MQTT user name")
@@ -179,8 +184,20 @@ def getOpts():
     else:
         logging.basicConfig(level=c['logLevel'])
 
-    if c['distance'] < 0:
-        logging.error("Invalid distance, must be positive NMs (%f)",
+    if c['slantDistance'] and c['groundDistance']:
+        logging.error("Must select either slant or ground distance, but not both")
+        sys.exit(1)
+    if not c['slantDistance'] and not c['groundDistance']:
+        c['distance'] = MAX_DISTANCE
+        c['slant'] = True
+    elif c['slantDistance']:
+        c['distance'] = c['slantDistance']
+        c['slant'] = True
+    else:
+        c['distance'] = c['groundDistance']
+        c['slant'] = False
+    if c['distance'] <= 0:
+        logging.error("Invalid distance, must be greater than zero NMs (%f)",
                       c['distance'])
         sys.exit(1)
 
@@ -238,7 +255,7 @@ def run(options):
     mqttClient.publishInRangeCountDiscoveryMsg()
     logging.info("Published Service, TracksCount, and InRangeCount discovery messages")
 
-    def createNewMessagesHandler(aircraftDatabase, receiverSite, tracksObj, mqttClient):
+    def createNewMessagesHandler(aircraftDatabase, receiverSite, tracksObj, mqttClient, slant=True):
         ''' Returns a closure that captures instances of objects needed by the callback
              for use in dealing with new ADS-B messages
         '''
@@ -261,7 +278,7 @@ def run(options):
                         continue
                 altitude = 0 if altitude == 'ground' else altitude
 
-                targetDist = receiverSite.groundDistanceNM(msg['lat'], msg['lon'])
+                targetDist = receiverSite.slantDistanceNM(msg['lat'], msg['lon']) if slant else receiverSite.groundDistanceNM(msg['lat'], msg['lon'])
                 msg['dist'] = targetDist
                 inRange = targetDist <= options['distance']
                 logging.info("%s in range: %s", msg['hex'], inRange)
@@ -290,7 +307,7 @@ def run(options):
             mqttClient.publishTracksCountUpdateMsg(tracksObj.numberOfTracks())
         return newMessages
 
-    newMessagesHandler = createNewMessagesHandler(aircraftDbObj, rxSiteObj, tracksObj, mqttClient)
+    newMessagesHandler = createNewMessagesHandler(aircraftDbObj, rxSiteObj, tracksObj, mqttClient, options['slant'])
 
     dumpDir = Path(options['adsbPath'])
 
