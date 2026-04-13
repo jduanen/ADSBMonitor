@@ -264,27 +264,32 @@ def run(options):
                 targetDist = receiverSite.groundDistanceNM(msg['lat'], msg['lon'])
                 msg['dist'] = targetDist
                 inRange = targetDist <= options['distance']
+                logging.info("%s in range: %s", msg['hex'], inRange)
 
                 if not tracksObj.trackExists(msg['hex']):
                     planeInfo = aircraftDatabase.getMappings(msg['hex'])
-                    acType = planeInfo[2] if planeInfo[2] else "_"
-                    acDesc = planeInfo[3] if planeInfo[3] else "_"
-                    msg['state'] = f"{acType};{acDesc}"
+                    msg['acType'] = planeInfo[2] if planeInfo[2] else "_"
+                    msg['acDesc'] = planeInfo[3] if planeInfo[3] else "_"
 
                     trackName = msg.get('flight', msg['hex'])
+                    logging.info("%s (%s) not tracked", trackName, msg['hex'])
+                    msg['trackName'] = trackName
                     if inRange:
                         mqttClient.publishTrackDiscoveryMsg(msg['hex'], trackName)
-                    #### TODO think about a delay here for the discovery to take place?
+                        time.sleep(0.1)  # delay to allow HA discovery to take place before updating
 
                 if inRange:
+                    logging.info("%s is in range", msg['hex'])
                     tracksObj.updateTrack(inRange, msgTime, msg)
                     mqttClient.publishTrackUpdateMsg(msg['hex'], msg)
                 else:
                     if tracksObj.isInRange(msg['hex']):
                         # was in range, now is not, so remove the track
-                        tracksObj.removeTrack(msg['hex'])
+                        logging.info("%s was in range, but now is not", msg['hex'])
+                        tracksObj.removeTrack(msg['hex'])  # staleHandler will send the null state update
                     else:
                         # still isn't in range, so update it
+                        logging.info("%s still in range", msg['hex'])
                         tracksObj.updateTrack(inRange, msgTime, msg)
 
             mqttClient.publishInRangeCountUpdateMsg(len(tracksObj.inRangeTrackIds()))
