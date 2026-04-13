@@ -99,9 +99,9 @@ class Tracks:
         return len(self.tracks)
 
     def isInRange(self, hexId):
-        if hexId not in self.tracks:
-            return None
-        return self.tracks[hexId]['inRange']
+        with self._lock:
+            track = self.tracks.get(hexId)
+            return track['inRange']
 
     def inRangeTrackIds(self):
         with self._lock:
@@ -111,8 +111,8 @@ class Tracks:
     def removeTrack(self, hexId):
         with self._lock:
             self.tracks.pop(hexId, None)
-            self.staleTrackHandler(hexId)
-            logging.info("remove: %s", hexId)
+        self.staleTrackHandler(hexId)
+        logging.info("remove: %s", hexId)
 
     def removeAllTracks(self):
         with self._lock:
