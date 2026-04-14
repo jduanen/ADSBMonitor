@@ -17,13 +17,13 @@ KM_PER_NM = METER_PER_NM / 1000.0
 
 R_km = 6371.0088  # Earth radius in kilometers (mean)
 
-FilterConstraints = namedtuple("FilterConstraints", ["min", "max"], defaults=[None, None])
-
 
 WGS84 = Geodesic.WGS84
 
 
 class ReceiverSite:
+    FilterConstraints = namedtuple("FilterConstraints", ["min", "max"], defaults=[None, None])
+
     def __init__(self, name, rxPosition, groundConstraints, slantConstraints,
                  verticalConstraints):
         self.nameRx = name
@@ -51,19 +51,19 @@ class ReceiverSite:
         return constraints
 
     def setGroundConstraints(self, constraints):
-        if not isinstance(constraints, FilterConstraints):
+        if not isinstance(constraints, ReceiverSite.FilterConstraints):
             logging.error("Must give FilterConstraints namedtuple")
         else:
             self.ground = constraints
 
     def setSlantConstraints(self, constraints):
-        if not isinstance(constraints, FilterConstraints):
+        if not isinstance(constraints, ReceiverSite.FilterConstraints):
             logging.error("Must give FilterConstraints namedtuple")
         else:
             self.slant = constraints
 
     def setVerticalConstraints(self, constraints):
-        if not isinstance(constraints, FilterConstraints):
+        if not isinstance(constraints, ReceiverSite.FilterConstraints):
             logging.error("Must give FilterConstraints namedtuple")
         else:
             self.vertical = constraints
