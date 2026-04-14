@@ -24,6 +24,20 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from common.BaseMqtt import BaseMqtt
 
 
+MSG_DEVICE = {
+    "identifiers": ["adsb_monitor"],
+    "name": "ADS-B Receiver",
+    "manufacturer": "Raspberry Pi 4B",
+    "model": "FlightAware USB",
+    "sw_version": "bookworm"
+}
+
+MSG_ORIGIN = {
+    "name": "adsbmon.py",
+    "sw": self.version
+}
+
+
 class AdsbMqtt(BaseMqtt):
     def __init__(self, clientId, host, port, keepalive, username=None, password=None, version=""):
         super().__init__(clientId, host, port, keepalive, username, password)
@@ -38,17 +52,8 @@ class AdsbMqtt(BaseMqtt):
             "payload_on": "online",
             "payload_off": "offline",
             "unique_id": "adsb_monitor_status",
-            "device": {
-                "identifiers": ["adsb_monitor"],
-                "name": "ADS-B Receiver",
-                "manufacturer": "Raspberry Pi 4B",
-                "model": "FlightAware USB",
-                "sw_version": "bookworm"
-            },
-            "origin": {
-                "name": "adsbmon.py",
-                "sw": self.version
-            }
+            "device": MSG_DEVICE,
+            "origin": MSG_ORIGIN
         }
         self.publishJson(topic, msg, retain=True)
 
@@ -85,7 +90,7 @@ class AdsbMqtt(BaseMqtt):
 
     def publishTrackUpdateMsg(self, hexId, message):
         topic = f"adsb/vehicles/{hexId}/state"
-        self.publishJson(topic, message, retain=True)  #### FIXME
+        self.publishJson(topic, message, retain=False)
 
     def publishTracksCountDiscoveryMsg(self):
         topic = "homeassistant/sensor/adsb_monitor/count/config"
@@ -96,17 +101,8 @@ class AdsbMqtt(BaseMqtt):
             "unit_of_measurement": "vehicles",
             "device_class": None,
             "state_class": "measurement",
-            "device": {
-                "identifiers": ["adsb_monitor"],
-                "name": "ADS-B Receiver",
-                "manufacturer": "Raspberry Pi 4B",
-                "model": "FlightAware USB",
-                "sw_version": "bookworm"
-            },
-            "origin": {
-                "name": "adsbmon.py",
-                "sw": self.version
-            }
+            "device": DEVICE,
+            "origin": ORIGIN
         }
         self.publishJson(topic, msg, retain=True)
 
@@ -128,17 +124,8 @@ class AdsbMqtt(BaseMqtt):
             "unit_of_measurement": "vehicles",
             "device_class": None,
             "state_class": "measurement",
-            "device": {
-                "identifiers": ["adsb_monitor"],
-                "name": "ADS-B Receiver",
-                "manufacturer": "Raspberry Pi 4B",
-                "model": "FlightAware USB",
-                "sw_version": "bookworm"
-            },
-            "origin": {
-                "name": "adsbmon.py",
-                "sw": self.version
-            }
+            "device": DEVICE,
+            "origin": ORIGIN
         }
         self.publishJson(topic, msg, retain=True)
 
