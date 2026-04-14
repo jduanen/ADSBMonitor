@@ -63,7 +63,7 @@ class AdsbMqtt(BaseMqtt):
             "name": trackName,
             "unique_id": f"adsb_{hexId}",
             "state_topic": f"adsb/vehicles/{hexId}/state",
-            "value_template": "{{ value_json.icao24 }}",
+            "value_template": "{{ value_json.trackName }}",
             "json_attributes_topic": f"adsb/vehicles/{hexId}/state",
             "json_attributes_template": "{{ value_json | tojson }}",
             "device": {
