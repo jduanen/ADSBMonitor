@@ -268,7 +268,7 @@ def run(options):
     mqttClient.publishTrackingCountDiscoveryMsg()
     logging.info("Published Service, TracksCount, and TrackingCount discovery messages")
 
-    def createNewMessagesHandler(aircraftDatabase, receiverSite, tracksObj, mqttClient):
+    def createNewMessagesHandler(aircraftDatabase, rxObj, tracksObj, mqttClient):
         ''' Returns a closure that captures instances of objects needed by the callback
              for use in dealing with new ADS-B messages
         '''
@@ -295,11 +295,11 @@ def run(options):
                 if msg['hex'].startswith('~'):
                     msg['hex'] = '_' + msg['hex'][1:]
 
-                msg['g_dist'] = round(receiverSite.groundDistanceNM(msg['lat'], msg['lon']), 2)
-                msg['s_dist'] = round(receiverSite.slantDistanceNM(msg['lat'], msg['lon'], alt), 2)
+                msg['g_dist'] = round(rxObj.groundDistanceNM(msg['lat'], msg['lon']), 2)
+                msg['s_dist'] = round(rxObj.slantDistanceNM(msg['lat'], msg['lon'], alt), 2)
 
                 trackPosition = Position(msg['lat'], msg['lon'], alt)
-                tracking = rxSiteObj.withinTrackingVolume(trackPosition)
+                tracking = rxObj.withinTrackingVolume(trackPosition)
                 logging.debug("Track %s @ %s: tracking=%d", msg['hex'], trackPosition, tracking)
 
                 planeInfo = aircraftDatabase.getMappings(msg['hex'])
