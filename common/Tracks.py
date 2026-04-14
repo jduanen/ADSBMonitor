@@ -4,13 +4,13 @@
 #
 # tracks
 #   - <hexId>
-#     - inTrackingVolume: <bool>
+#     - tracking: <bool>
 #     - msgTime: <time>
 #     - msg: <adsbMsg>
 #       * hex: <hexId>
 #       ...
 #   - <hexId>
-#     - inTrackingVolume: <bool>
+#     - tracking: <bool>
 #     - msgTime: <time>
 #     - msg: <adsbMsg>
 #       * hex: <hexId>
