@@ -282,10 +282,10 @@ def run(options):
                 msg['dist'] = targetDist
                 inRange = targetDist <= options['distance']
                 planeInfo = aircraftDatabase.getMappings(msg['hex'])
-                msg['acType'] = planeInfo[2] if planeInfo[2] else "_"
-                msg['acDesc'] = planeInfo[3] if planeInfo[3] else "_"
+                msg['ac_type'] = planeInfo[2] if planeInfo[2] else "_"
+                msg['ac_desc'] = planeInfo[3] if planeInfo[3] else "_"
                 trackName = msg.get('flight', msg['hex'])
-                msg['trackName'] = trackName
+                msg['track_name'] = trackName
                 logging.info("%s in range: %s", msg['hex'], inRange)
 
                 if inRange:
