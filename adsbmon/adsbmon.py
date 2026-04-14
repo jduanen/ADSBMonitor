@@ -33,7 +33,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from AdsbMqtt import AdsbMqtt
 from common.AircraftDB import AircraftDB
 from common.JsonFileHandler import JsonFileHandler
-from common.ReceiverSite import ReceiverSite
+from common.ReceiverSite import ReceiverSite, FilterConstraints
 from common.Tracks import Tracks
 
 import pdb  ## pdb.set_trace()
@@ -50,8 +50,8 @@ MQTT_CLIENT_ID = "adsb_vehicles"
 MAX_DISTANCE = 100  # limit max possible distance to 100NM
 
 DEFAULTS = {
-    'altitude': ReceiverSite.FilterConstraints(),
-    'groundDistance': ReceiverSite.FilterConstraints(),
+    'altitude': FilterConstraints(),
+    'groundDistance': FilterConstraints(),
     'interval': 60.0,
     'logFile': None,
     'logLevel': "WARNING",
@@ -62,7 +62,7 @@ DEFAULTS = {
     'mqttKeepalive': 60,  # 1min
     'name': "Home",
     'readHistory': False,
-    'slantDistance': ReceiverSite.FilterConstraints(),
+    'slantDistance': FilterConstraints(),
     'verbose': None
 }
 
@@ -82,12 +82,14 @@ class ExitGracefully:
         match sig:
             case signal.SIGHUP:
                 logging.info("SIGHUP: stopping")
-                self.stopEvent.set()
             case signal.SIGINT:
                 logging.info("SIGINT: stopping")
-                self.stopEvent.set()
+            case signal.SIGTERM:
+                logging.info("SIGTERM: stopping")
             case _:
                 logging.info("unknown signal: %s", sig)
+                return
+            self.stopEvent.set()
 
 
 def getOpts():
@@ -227,11 +229,11 @@ def run(options):
     homePosition = Position(options['position'][0], options['position'][1],
                             options['position'][2])
 
-    groundConstriants = ReceiverSite.FilterConstraints(options['distance'][0], options['distance'][1])
-    slantConstriants = ReceiverSite.FilterConstraints(options['slant'][0], options['slant'][1])
-    verticalConstriants = ReceiverSite.FilterConstraints(options['altitude'][0], options['altitude'][1])
-    rxSiteObj = ReceiverSite(options['name'], homePosition, slantConstriants,
-                             groundConstriants, verticalConstriants)
+    groundConstraints = FilterConstraints(options['distance'][0], options['distance'][1])
+    slantConstraints = FilterConstraints(options['slant'][0], options['slant'][1])
+    verticalConstraints = FilterConstraints(options['altitude'][0], options['altitude'][1])
+    rxSiteObj = ReceiverSite(options['name'], homePosition, slantConstraints,
+                             groundConstraints, verticalConstraints)
     logging.info(repr(rxSiteObj))
 
     try:
@@ -293,7 +295,7 @@ def run(options):
                 msg['g_dist'] = round(receiverSite.groundDistanceNM(msg['lat'], msg['lon']), 2)
                 msg['s_dist'] = round(receiverSite.slantDistanceNM(msg['lat'], msg['lon'], alt), 2)
 
-                trackPosition = Position(msg['lat'], msg['lon'], altitude)
+                trackPosition = Position(msg['lat'], msg['lon'], alt)
                 tracking = rxSiteObj.withinTrackingVolume(trackPosition)
                 logging.debug("Track %s @ %s: tracking=%d", msg['hex'], trackPosition, tracking)
 
@@ -320,7 +322,7 @@ def run(options):
             mqttClient.publishTracksCountUpdateMsg(tracksObj.numberOfTracks())
         return newMessages
 
-    newMessagesHandler = createNewMessagesHandler(aircraftDbObj, rxSiteObj, tracksObj, mqttClient, options['slant'])
+    newMessagesHandler = createNewMessagesHandler(aircraftDbObj, rxSiteObj, tracksObj, mqttClient)
 
     dumpDir = Path(options['adsbPath'])
 
@@ -350,7 +352,7 @@ def run(options):
     observer = PollingObserver()
     aircraftJsonPath = dumpDir / AIRCRAFT_JSON_FILE
     handler = JsonFileHandler(aircraftJsonPath, newMessagesHandler)
-    observer.schedule(handler, path=str(aircraftJsonPath), recursive=False)
+    observer.schedule(handler, path=str(dumpDir), recursive=False)
     observer.start()
     logging.debug("Watching %s...", str(aircraftJsonPath))
     try:
@@ -376,7 +378,6 @@ def run(options):
     time.sleep(0.6)  # allow mqtt message to be sent before exiting
     tracksObj.stopGarbageCollect()
     logging.debug("Shutdown complete, exiting")
-    sys.exit(0)
 
 
 if __name__ == "__main__":
