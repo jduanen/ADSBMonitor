@@ -277,6 +277,7 @@ def run(options):
                         logging.debug("Message is missing altitude field, skipping (%s)", msg['hex'])
                         continue
                 altitude = 0 if altitude == 'ground' else altitude
+                msg['alt'] = altitude
 
                 if msg['hex'].startswith('~'):
                     #### TMP TMP TMP TMP
