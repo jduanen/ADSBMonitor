@@ -278,6 +278,11 @@ def run(options):
                         continue
                 altitude = 0 if altitude == 'ground' else altitude
 
+                if msg['hex'].startswith('~'):
+                    #### TMP TMP TMP TMP
+                    newHexId = '_' + msg['hex'][1:]
+                    logging.warning("hexId starts with ~ (%s), coverted to: %s", msg['hex'], newHexId)
+                    msg['hex'] = newHexId
                 targetDist = receiverSite.slantDistanceNM(msg['lat'], msg['lon'], altitude) if slant else receiverSite.groundDistanceNM(msg['lat'], msg['lon'])
                 msg['dist'] = targetDist
                 inRange = targetDist <= options['distance']
