@@ -89,7 +89,7 @@ class ExitGracefully:
             case _:
                 logging.info("unknown signal: %s", sig)
                 return
-            self.stopEvent.set()
+        self.stopEvent.set()
 
 
 def getOpts():
@@ -232,11 +232,11 @@ def run(options):
     homePosition = Position(options['position'][0], options['position'][1],
                             options['position'][2])
 
-    groundConstraints = FilterConstraints(options['distance'][0], options['distance'][1])
-    slantConstraints = FilterConstraints(options['slant'][0], options['slant'][1])
+    groundConstraints = FilterConstraints(options['groundDistance'][0], options['groundDistance'][1])
+    slantConstraints = FilterConstraints(options['slantDistance'][0], options['slantDistance'][1])
     verticalConstraints = FilterConstraints(options['altitude'][0], options['altitude'][1])
-    rxSiteObj = ReceiverSite(options['name'], homePosition, slantConstraints,
-                             groundConstraints, verticalConstraints)
+    rxSiteObj = ReceiverSite(options['name'], homePosition, groundConstraints,
+                             slantConstraints, verticalConstraints)
     logging.info(repr(rxSiteObj))
 
     try:
@@ -375,10 +375,13 @@ def run(options):
     tracksObj.removeAllTracks()
     mqttClient.publishTracksCountUpdateMsg(0)
     mqttClient.publishTrackingCountUpdateMsg(0)
-    mqttClient.publishServiceStateMsg(False)
+    info = mqttClient.publishServiceStateMsg(False)
     logging.info("Published zero to Tracks and Tracking counts and Service state False @ %s",
                  datetime.fromtimestamp(time.time()))
-    time.sleep(0.6)  # allow mqtt message to be sent before exiting
+    try:
+        info.wait_for_publish(timeout=5.0)
+    except (ValueError, RuntimeError) as e:
+        logging.warning("MQTT flush failed: %s", e)
     tracksObj.stopGarbageCollect()
     logging.debug("Shutdown complete, exiting")
 
