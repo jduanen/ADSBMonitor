@@ -63,14 +63,13 @@ class AdsbMqtt(BaseMqtt):
             "name": trackName,
             "unique_id": f"adsb_{hexId}",
             "state_topic": f"adsb/vehicles/{hexId}/state",
-            "value_template": "{{ value_json.trackName }}",
+            "value_template": "{{ value_json.trackName | trim }}",
             "json_attributes_topic": f"adsb/vehicles/{hexId}/state",
             "json_attributes_template": "{{ value_json | tojson }}",
             "device": {
                 "identifiers": [f"adsb_vehicle_{hexId}"],
-                "name": f"ADS-B Vehicle {hexId}",
+                "name": f"ADS-B {hexId}",
             },
-            "unit_of_measurement": "vehicles",
             "device_class": None,
             "state_class": None,
             "origin": {
