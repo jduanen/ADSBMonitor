@@ -99,7 +99,7 @@ class AdsbMqtt(BaseMqtt):
             "unit_of_measurement": "vehicles",
             "device_class": None,
             "state_class": "measurement",
-            "device": DEVICE,
+            "device": MSG_DEVICE,
             "origin": {
                 "name": self.__class__.__name__,
                 "sw": self.version
@@ -125,7 +125,7 @@ class AdsbMqtt(BaseMqtt):
             "unit_of_measurement": "vehicles",
             "device_class": None,
             "state_class": "measurement",
-            "device": DEVICE,
+            "device": MSG_DEVICE,
             "origin": {
                 "name": self.__class__.__name__,
                 "sw": self.version
