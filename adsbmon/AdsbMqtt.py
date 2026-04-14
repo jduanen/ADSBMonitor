@@ -12,9 +12,9 @@
 #  * publishTracksCountDiscoveryMsg:      "homeassistant/sensor/adsb_monitor/count/config"
 #  * publishNullTracksCountDiscoveryMsg:  "homeassistant/sensor/adsb_monitor/count/config"
 #  * publishTracksCountUpdateMsg:         "adsb/monitor/count"
-#  * publishInRangeCountDiscoveryMsg:     "homeassistant/sensor/adsb_monitor/in_range/config"
-#  * publishInRangeCountNullMsg:          "homeassistant/sensor/adsb_monitor/in_range/config"
-#  * publishInRangeCountUpdateMsg:        "adsb/monitor/in_range"
+#  * publishTrackingCountDiscoveryMsg:    "homeassistant/sensor/adsb_monitor/tracking/config"
+#  * publishTrackingCountNullMsg:         "homeassistant/sensor/adsb_monitor/tracking/config"
+#  * publishTrackingCountUpdateMsg:       "adsb/monitor/tracking"
 #
 
 import os
@@ -30,11 +30,6 @@ MSG_DEVICE = {
     "manufacturer": "Raspberry Pi 4B",
     "model": "FlightAware USB",
     "sw_version": "bookworm"
-}
-
-MSG_ORIGIN = {
-    "name": "adsbmon.py",
-    "sw": self.version
 }
 
 
@@ -53,7 +48,10 @@ class AdsbMqtt(BaseMqtt):
             "payload_off": "offline",
             "unique_id": "adsb_monitor_status",
             "device": MSG_DEVICE,
-            "origin": MSG_ORIGIN
+            "origin": {
+                "name": self.__class__.__name__,
+                "sw": self.version
+            }
         }
         self.publishJson(topic, msg, retain=True)
 
@@ -102,7 +100,10 @@ class AdsbMqtt(BaseMqtt):
             "device_class": None,
             "state_class": "measurement",
             "device": DEVICE,
-            "origin": ORIGIN
+            "origin": {
+                "name": self.__class__.__name__,
+                "sw": self.version
+            }
         }
         self.publishJson(topic, msg, retain=True)
 
@@ -115,25 +116,28 @@ class AdsbMqtt(BaseMqtt):
         msg = numTracks
         self.publishJson(topic, msg, retain=True)
 
-    def publishInRangeCountDiscoveryMsg(self):
-        topic = "homeassistant/sensor/adsb_monitor/in_range/config"
+    def publishTrackingCountDiscoveryMsg(self):
+        topic = "homeassistant/sensor/adsb_monitor/tracking/config"
         msg = {
-            "name": "ADS-B Monitor vehicles in range count",
-            "state_topic": "adsb/monitor/in_range",
-            "unique_id": "adsb_monitor_in_range",
+            "name": "ADS-B Monitor vehicles tracking count",
+            "state_topic": "adsb/monitor/tracking",
+            "unique_id": "adsb_monitor_tracking",
             "unit_of_measurement": "vehicles",
             "device_class": None,
             "state_class": "measurement",
             "device": DEVICE,
-            "origin": ORIGIN
+            "origin": {
+                "name": self.__class__.__name__,
+                "sw": self.version
+            }
         }
         self.publishJson(topic, msg, retain=True)
 
-    def publishInRangeCountNullMsg(self):
-        topic = "homeassistant/sensor/adsb_monitor/in_range/config"
+    def publishTrackingCountNullMsg(self):
+        topic = "homeassistant/sensor/adsb_monitor/tracking/config"
         self.publishJson(topic, "", retain=True)
 
-    def publishInRangeCountUpdateMsg(self, numTracks):
-        topic = "adsb/monitor/in_range"
+    def publishTrackingCountUpdateMsg(self, numTracks):
+        topic = "adsb/monitor/tracking"
         msg = numTracks
         self.publishJson(topic, msg, retain=True)
