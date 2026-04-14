@@ -37,11 +37,9 @@ class BaseMqtt:
         self.client.on_connect = BaseMqtt._onMqttConnect
 
         if self.client.connect(self.host, self.port, self.keepalive) != mqtt.MQTT_ERR_SUCCESS:
-            logging.error("Failed to connect to %s on port %d", self.host, self.port)
-            return None
+            raise ConnectionError("Failed to connect to MQTT broker at %s:%s", self.host, self.port)
         if self.client.loop_start() != mqtt.MQTT_ERR_SUCCESS:
-            logging.error("Failed to start the MQTT polling loop")
-            return None
+            raise ConnectionError("Failed to start the MQTT polling loop")
         logging.debug("MQTT Client initialized successfully")
 
     def publishJson(self, topic, msg, retain=False):
