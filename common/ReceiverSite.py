@@ -115,7 +115,7 @@ class ReceiverSite:
         return ReceiverSite._geodesicDistanceNM(self.rxPos.latitude, self.rxPos.longitude,
                                                 target.lat, target.lon)
 
-    def withinVolume(self, target):
+    def withinTrackingVolume(self, target):
         ''' ?
             ground (min_nm, max_nm)
             slant (min_nm, max_nm)
