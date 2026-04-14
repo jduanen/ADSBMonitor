@@ -96,10 +96,12 @@ class Tracks:
         self._stopTimer()
 
     def numberOfTracks(self):
-        return len(self.tracks)
+        with self._lock:
+            return len(self.tracks)
 
     def trackExists(self, hexId):
-        return hexId in self.tracks
+        with self._locK:
+            return hexId in self.tracks
 
     def isInRange(self, hexId):
         with self._lock:
