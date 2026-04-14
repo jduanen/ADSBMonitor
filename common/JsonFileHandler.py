@@ -23,6 +23,8 @@ class JsonFileHandler(FileSystemEventHandler):
     '''
 
     def on_created(self, event):
+        if Path(event.src_path).resolve() != self.filePath.resolve():
+            return  # ignore changes to history_*.json and other files in the same directory
         self.lastChanged = time.time()
         self.readJson()
 
