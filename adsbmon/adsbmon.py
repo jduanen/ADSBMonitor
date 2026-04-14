@@ -281,18 +281,17 @@ def run(options):
                 targetDist = receiverSite.slantDistanceNM(msg['lat'], msg['lon'], altitude) if slant else receiverSite.groundDistanceNM(msg['lat'], msg['lon'])
                 msg['dist'] = targetDist
                 inRange = targetDist <= options['distance']
+                planeInfo = aircraftDatabase.getMappings(msg['hex'])
+                msg['acType'] = planeInfo[2] if planeInfo[2] else "_"
+                msg['acDesc'] = planeInfo[3] if planeInfo[3] else "_"
+                trackName = msg.get('flight', msg['hex'])
+                msg['trackName'] = trackName
                 logging.info("%s in range: %s", msg['hex'], inRange)
 
                 if inRange:
                     logging.info("%s is in range", msg['hex'])
                     if not tracksObj.isInRange(msg['hex']):
-                        planeInfo = aircraftDatabase.getMappings(msg['hex'])
-                        msg['acType'] = planeInfo[2] if planeInfo[2] else "_"
-                        msg['acDesc'] = planeInfo[3] if planeInfo[3] else "_"
-
-                        trackName = msg.get('flight', msg['hex'])
                         logging.info("%s (%s) was not in range before this", trackName, msg['hex'])
-                        msg['trackName'] = trackName
                         mqttClient.publishTrackDiscoveryMsg(msg['hex'], trackName)
                         time.sleep(0.1)  # delay to allow HA discovery to take place before updating
                     mqttClient.publishTrackUpdateMsg(msg['hex'], msg)
