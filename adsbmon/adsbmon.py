@@ -156,7 +156,7 @@ def getOpts():
         with open(configFilePath, "r", encoding="utf-8") as confFile:
             fileOpts = list(yaml.load_all(confFile, Loader=yaml.SafeLoader))
             if len(fileOpts) >= 1:
-                conf['fileOpts'] = fileOpts[0]
+                conf['fileOpts'] = fileOpts[0] if fileOpts[0] is not None else {}
                 if len(fileOpts) > 1:
                     print("WARNING: Multiple config docs. Using the first one",
                           file=sys.stderr)
@@ -219,16 +219,13 @@ def run(options):
         tracksObj.printAll()
 
     stopEvent = threading.Event()
-    ExitGracefully(stopEvent)
+    _exit = ExitGracefully(stopEvent)
 
     if (options['verbose'] or 0) > 1:
         json.dump(options, sys.stdout, indent=4, sort_keys=True)
         print("")
 
     aircraftDbObj = AircraftDB(options['dbFilePath'])
-
-    homePosition = Position(options['position'][0], options['position'][1],
-                            options['position'][2])
 
     rxSiteObj = ReceiverSite(options['name'], Position(*options['position']),
                              options['groundDistance'],
@@ -252,6 +249,7 @@ def run(options):
         def staleTrack(staleHexId):
             ''' Called whenever a stale track is to be deleted
                 N.B. This is called before the track is deleted
+                This is unnecessary, but I might want to add other stuff later
             '''
             mqttClient.publishNullTrackDiscoveryMsg(staleHexId)
         return staleTrack
@@ -265,7 +263,7 @@ def run(options):
     mqttClient.publishTrackingCountDiscoveryMsg()
     logging.info("Published Service, TracksCount, and TrackingCount discovery messages")
 
-    def createNewMessagesHandler(aircraftDatabase, rxObj, tracksObj, mqttClient):
+    def createNewMessagesHandler(aircraftDatabase, rxObj, trksObj, mqttClient):
         ''' Returns a closure that captures instances of objects needed by the callback
              for use in dealing with new ADS-B messages
         '''
@@ -300,7 +298,7 @@ def run(options):
 
                     trackPosition = Position(msg['lat'], msg['lon'], alt)
                     tracking = rxObj.withinTrackingVolume(trackPosition)
-                    logging.debug("Track %s @ %s: tracking=%d", msg['hex'], trackPosition, tracking)
+                    logging.debug("Track %s @ %s: tracking=%s", msg['hex'], trackPosition, tracking)
 
                     planeInfo = aircraftDatabase.getMappings(msg['hex'])
                     msg['ac_type'] = planeInfo[2] if planeInfo[2] else "_"
@@ -309,26 +307,26 @@ def run(options):
                     msg['track_name'] = trackName
 
                     if tracking:
-                        if not tracksObj.isTracking(msg['hex']):
+                        if not trksObj.isTracking(msg['hex']):
                             logging.debug("%s (%s) was not in tracking volume before this", trackName, msg['hex'])
                             mqttClient.publishTrackDiscoveryMsg(msg['hex'], trackName)
                             # delay to allow HA discovery to take place before updating
                             threading.Timer(0.1, mqttClient.publishTrackUpdateMsg, args=[msg['hex'], dict(msg)]).start()
                         else:
                             mqttClient.publishTrackUpdateMsg(msg['hex'], msg)
-                        tracksObj.updateTrack(tracking, msgTime, msg)
+                        trksObj.updateTrack(tracking, msgTime, msg)
                     else:
                         logging.debug("%s not in tracking volume", msg['hex'])
-                        if tracksObj.isTracking(msg['hex']):
+                        if trksObj.isTracking(msg['hex']):
                             logging.debug("%s was in tracking volume before this, and now it's not", msg['hex'])
-                            tracksObj.removeTrack(msg['hex'])  # staleHandler will send the null state update
+                            trksObj.removeTrack(msg['hex'])  # staleHandler will send the null state update
                         else:
-                            tracksObj.updateTrack(tracking, msgTime, msg)
+                            trksObj.updateTrack(tracking, msgTime, msg)
 
-                mqttClient.publishTrackingCountUpdateMsg(len(tracksObj.trackingTrackIds()))
-                mqttClient.publishTracksCountUpdateMsg(tracksObj.numberOfTracks())
-            except Exception as e:
-                logging.exception("Exception in newMessages: %s", e)
+                mqttClient.publishTrackingCountUpdateMsg(len(trksObj.trackingTrackIds()))
+                mqttClient.publishTracksCountUpdateMsg(trksObj.numberOfTracks())
+            except Exception:
+                logging.exception("Exception in newMessages")
         return newMessages
 
     newMessagesHandler = createNewMessagesHandler(aircraftDbObj, rxSiteObj, tracksObj, mqttClient)
