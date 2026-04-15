@@ -275,7 +275,7 @@ def run(options):
                         logging.warning("Malformed message, no 'hex' field, skipping message")
                         continue
                     if not {'lat', 'lon'} <= msg.keys():
-                        logging.warning("Message is missing lat or lon, skipping (%s)", msg['hex'])
+                        logging.debug("Message is missing lat or lon, skipping (%s)", msg['hex'])
                         continue
                     if msg.get('alt_geom') is not None:
                         alt = msg['alt_geom']
