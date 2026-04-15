@@ -280,9 +280,9 @@ def run(options):
                     if not {'lat', 'lon'} <= msg.keys():
                         logging.warning("Message is missing lat or lon, skipping (%s)", msg['hex'])
                         continue
-                    if 'alt_geom' in msg and msg['alt_geom']:
+                    if msg.get('alt_geom') is not None:
                         alt = msg['alt_geom']
-                    elif 'alt_baro' in msg and msg['alt_baro']:
+                    elif msg.get('alt_baro') is not None:
                         alt = msg['alt_baro']
                     else:
                         logging.debug("Message is missing altitude field, skipping (%s)", msg['hex'])
@@ -355,8 +355,7 @@ def run(options):
     '''
 
     mqttClient.publishServiceStateMsg(True)
-    logging.info("Published Service state True @ %s",
-                 datetime.fromtimestamp(time.time()))
+    logging.info("Published Service state True @ %s", datetime.now())
 
     observer = PollingObserver()
     aircraftJsonPath = dumpDir / AIRCRAFT_JSON_FILE
@@ -366,7 +365,8 @@ def run(options):
     logging.debug("Watching %s...", str(aircraftJsonPath))
     try:
         while observer.is_alive() and not stopEvent.is_set():
-            time.sleep(1.0)  # 1sec poll
+            if stopEvent.wait(1.0):
+                break
             if time.time() - handler.lastChanged > FILE_UNCHANGED_TIMEOUT:
                 logging.error("No update of %s for %s secs",
                               aircraftJsonPath, FILE_UNCHANGED_TIMEOUT)
@@ -383,7 +383,7 @@ def run(options):
     mqttClient.publishTrackingCountUpdateMsg(0)
     info = mqttClient.publishServiceStateMsg(False)
     logging.info("Published zero to Tracks and Tracking counts and Service state False @ %s",
-                 datetime.fromtimestamp(time.time()))
+                 datetime.now())
     try:
         info.wait_for_publish(timeout=5.0)
     except (ValueError, RuntimeError) as e:
