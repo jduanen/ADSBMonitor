@@ -100,7 +100,7 @@ class Tracks:
             return len(self.tracks)
 
     def trackExists(self, hexId):
-        with self._locK:
+        with self._lock:
             return hexId in self.tracks
 
     def isTracking(self, hexId):

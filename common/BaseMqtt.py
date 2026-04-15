@@ -43,6 +43,10 @@ class BaseMqtt:
         logging.debug("MQTT Client initialized successfully")
 
     def publishJson(self, topic, msg, retain=False):
+        ''' Publish the given JSON message.
+            Returns MQTTMessageInfo so that the caller can do .wait_for_publish()
+             on the message.
+        '''
         if isinstance(msg, str):
             jsonPayload = msg
         else:
@@ -54,3 +58,4 @@ class BaseMqtt:
             logging.debug("Message: %s", jsonPayload)
         else:
             logging.warning("Failed to send message to topic: %s; error code: %d", topic, result.rc)
+        return result

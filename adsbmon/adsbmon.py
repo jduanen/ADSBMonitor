@@ -13,7 +13,6 @@ import json
 import logging
 import os
 from pathlib import Path
-from pprint import pprint
 import signal
 import sys
 import threading
@@ -36,8 +35,6 @@ from common.JsonFileHandler import JsonFileHandler
 from common.ReceiverSite import ReceiverSite, FilterConstraints
 from common.Tracks import Tracks
 
-import pdb  ## pdb.set_trace()
-
 
 STALE_TRACK_TIME = 28  # garbage collect records after this many secs
 
@@ -47,12 +44,9 @@ AIRCRAFT_JSON_FILE = "aircraft.json"
 
 MQTT_CLIENT_ID = "adsb_vehicles"
 
-MAX_DISTANCE = 100  # limit max possible distance to 100NM
-
 DEFAULTS = {
     'altitude': FilterConstraints(),
     'groundDistance': FilterConstraints(),
-    'interval': 60.0,
     'logFile': None,
     'logLevel': "WARNING",
     'mqttHost': "homeassistant.lan",
@@ -61,7 +55,7 @@ DEFAULTS = {
     'mqttPasswd': None,
     'mqttKeepalive': 60,  # 1min
     'name': "Home",
-    'readHistory': False,
+    #'readHistory': False,
     'slantDistance': FilterConstraints(),
     'verbose': None
 }
@@ -77,7 +71,7 @@ class ExitGracefully:
         signal.signal(signal.SIGHUP, self._signalHandler)   # terminal closed
 
     def _signalHandler(self, sig, frame):
-        ''' Catch SIGHUP to force a restart and SIGINT to stop
+        ''' Signals set the stop event (which should cause a cleanup and exit)
         '''
         match sig:
             case signal.SIGHUP:
@@ -89,7 +83,7 @@ class ExitGracefully:
             case _:
                 logging.info("unknown signal: %s", sig)
                 return
-            self.stopEvent.set()
+        self.stopEvent.set()
 
 
 def getOpts():
@@ -109,9 +103,6 @@ def getOpts():
     ap.add_argument(
         "-d", "--dbFilePath", action="store", type=str,
         help="Path to the plane database")
-    ap.add_argument(
-        "-i", "--interval", action="store", type=float,
-        help="Interval between publishing MQTT messages (in secs)")
     ap.add_argument(
         "-k", "--mqttKeepalive", action="store", type=int,
         help="MQTT connection keep alive time (secs)")
@@ -134,9 +125,9 @@ def getOpts():
     ap.add_argument(
         "-p", "--position", metavar=("lat", "lon", "alt"), type=float, nargs=3,
         help="Position: <lat> <lon> <alt>")
-    ap.add_argument(
-        "-r", "--readHistory", action="store_true", default=False,
-        help="Read history files on startup")
+    #ap.add_argument(
+    #    "-r", "--readHistory", action="store_true",
+    #    help="Read history files on startup")
     ap.add_argument(
         "-s", "--slantDistance", metavar=["min", "max"], type=float, nargs=2,
         help="Min/max slant distance filter constraint (from receiver in NM)")
@@ -163,9 +154,9 @@ def getOpts():
             print(f"ERROR: Invalid configuration file path: {configFilePath}", file=sys.stderr)
             sys.exit(1)
         with open(configFilePath, "r", encoding="utf-8") as confFile:
-            fileOpts = list(yaml.load_all(confFile, Loader=yaml.Loader))
+            fileOpts = list(yaml.load_all(confFile, Loader=yaml.SafeLoader))
             if len(fileOpts) >= 1:
-                conf['fileOpts'] = fileOpts[0]
+                conf['fileOpts'] = fileOpts[0] if fileOpts[0] is not None else {}
                 if len(fileOpts) > 1:
                     print("WARNING: Multiple config docs. Using the first one",
                           file=sys.stderr)
@@ -193,24 +184,29 @@ def getOpts():
         logging.error("Must give position of receiver")
         sys.exit(1)
 
-    if c['groundDistance'].min is not None and c['groundDistance'].max is not None and
-       c['groundDistance'].min >= c['groundDistance'].max:
+    for key in ('groundDistance', 'slantDistance', 'altitude'):
+        if isinstance(c[key], list):
+            c[key] = FilterConstraints(*c[key])
+
+    if c['groundDistance'].min is not None and c['groundDistance'].max is not None and c['groundDistance'].min >= c['groundDistance'].max:
         logging.error("Invalid constraint: ground distance min %f >= max %f NM",
                       c['groundDistance'][0], c['groundDistance'][1])
         sys.exit(1)
-    if c['slantDistance'].min is not None and c['slantDistance'].max is not None and
-       c['slantDistance'].min  >= c['slantDistance'].max:
+    if c['slantDistance'].min is not None and c['slantDistance'].max is not None and c['slantDistance'].min  >= c['slantDistance'].max:
         logging.error("Invalid constraint: slant distance min %f >= max %f NM",
                       c['slantDistance'][0], c['slantDistance'][1])
         sys.exit(1)
-    if c['altitude'].min is not None and c['altitude'].max is not None and
-       c['altitude'].min  >= c['altitude'].max:
+    if c['altitude'].min is not None and c['altitude'].max is not None and c['altitude'].min  >= c['altitude'].max:
         logging.error("Invalid constraint: altitude/vertical distance min %f >= max %f NM",
                       c['altitude'][0], c['altitude'][1])
         sys.exit(1)
 
-    if 'adsbPath' not in c:
-        logging.error("Must specify the path to where dump1090-fa stores its files")
+    if not c['dbFilePath'] or not Path(c['dbFilePath']).is_file():
+        logging.error("Must provide valid path to the AircraftDB")
+        sys.exit(1)
+
+    if not Path(c['adsbPath']).is_dir():
+        logging.error("adsbPath does not exist or is not a directory: %s", c['adsbPath'])
         sys.exit(1)
     return c
 
@@ -218,10 +214,9 @@ def getOpts():
 def run(options):
     def usr1Handler(sig, frame):
         tracksObj.printAll()
-    signal.signal(signal.SIGUSR1, usr1Handler)   # 'kill -USR1' to print current tracks
 
     stopEvent = threading.Event()
-    ExitGracefully(stopEvent)
+    _exit = ExitGracefully(stopEvent)
 
     if (options['verbose'] or 0) > 1:
         json.dump(options, sys.stdout, indent=4, sort_keys=True)
@@ -229,14 +224,10 @@ def run(options):
 
     aircraftDbObj = AircraftDB(options['dbFilePath'])
 
-    homePosition = Position(options['position'][0], options['position'][1],
-                            options['position'][2])
-
-    groundConstraints = FilterConstraints(options['distance'][0], options['distance'][1])
-    slantConstraints = FilterConstraints(options['slant'][0], options['slant'][1])
-    verticalConstraints = FilterConstraints(options['altitude'][0], options['altitude'][1])
-    rxSiteObj = ReceiverSite(options['name'], homePosition, slantConstraints,
-                             groundConstraints, verticalConstraints)
+    rxSiteObj = ReceiverSite(options['name'], Position(*options['position']),
+                             options['groundDistance'],
+                             options['slantDistance'],
+                             options['altitude'])
     logging.info(repr(rxSiteObj))
 
     try:
@@ -255,6 +246,7 @@ def run(options):
         def staleTrack(staleHexId):
             ''' Called whenever a stale track is to be deleted
                 N.B. This is called before the track is deleted
+                This is unnecessary, but I might want to add other stuff later
             '''
             mqttClient.publishNullTrackDiscoveryMsg(staleHexId)
         return staleTrack
@@ -268,7 +260,7 @@ def run(options):
     mqttClient.publishTrackingCountDiscoveryMsg()
     logging.info("Published Service, TracksCount, and TrackingCount discovery messages")
 
-    def createNewMessagesHandler(aircraftDatabase, receiverSite, tracksObj, mqttClient):
+    def createNewMessagesHandler(aircraftDatabase, rxObj, trksObj, mqttClient):
         ''' Returns a closure that captures instances of objects needed by the callback
              for use in dealing with new ADS-B messages
         '''
@@ -276,58 +268,69 @@ def run(options):
             ''' Function that gets called each time a new list of messages is
                  written to the log file.
             '''
-            msgTime = data['now']
-            for msg in data['aircraft']:
-                if not {'lat', 'lon'} <= msg.keys():
-                    logging.warning("Message is missing lat or lon, skipping (%s)", msg['hex'])
-                    continue
-                else:
-                    if 'alt_geom' in msg and msg['alt_geom']:
+            try:
+                msgTime = data['now']
+                for msg in data['aircraft']:
+                    if 'hex' not in msg:
+                        logging.warning("Malformed message, no 'hex' field, skipping message")
+                        continue
+                    if not {'lat', 'lon'} <= msg.keys():
+                        logging.warning("Message is missing lat or lon, skipping (%s)", msg['hex'])
+                        continue
+                    if msg.get('alt_geom') is not None:
                         alt = msg['alt_geom']
-                    elif 'alt_baro' in msg and msg['alt_baro']:
+                    elif msg.get('alt_baro') is not None:
                         alt = msg['alt_baro']
                     else:
                         logging.debug("Message is missing altitude field, skipping (%s)", msg['hex'])
                         continue
-                alt = 0 if alt == 'ground' else alt
-                msg['alt'] = alt
+                    alt = 0 if alt == 'ground' else alt
+                    msg['alt'] = alt
 
-                if msg['hex'].startswith('~'):
-                    msg['hex'] = '_' + msg['hex'][1:]
+                    if msg['hex'].startswith('~'):
+                        msg['hex'] = '_' + msg['hex'][1:]
 
-                msg['g_dist'] = round(receiverSite.groundDistanceNM(msg['lat'], msg['lon']), 2)
-                msg['s_dist'] = round(receiverSite.slantDistanceNM(msg['lat'], msg['lon'], alt), 2)
+                    msg['g_dist'] = round(rxObj.groundDistanceNM(msg['lat'], msg['lon']), 2)
+                    msg['s_dist'] = round(rxObj.slantDistanceNM(msg['lat'], msg['lon'], alt), 2)
 
-                trackPosition = Position(msg['lat'], msg['lon'], alt)
-                tracking = rxSiteObj.withinTrackingVolume(trackPosition)
-                logging.debug("Track %s @ %s: tracking=%d", msg['hex'], trackPosition, tracking)
+                    trackPosition = Position(msg['lat'], msg['lon'], alt)
+                    tracking = rxObj.withinTrackingVolume(trackPosition)
+                    logging.debug("Track %s @ %s: tracking=%s", msg['hex'], trackPosition, tracking)
 
-                planeInfo = aircraftDatabase.getMappings(msg['hex'])
-                msg['ac_type'] = planeInfo[2] if planeInfo[2] else "_"
-                msg['ac_desc'] = planeInfo[3] if planeInfo[3] else "_"
-                trackName = msg.get('flight', msg['hex']).strip()
-                msg['track_name'] = trackName
+                    planeInfo = aircraftDatabase.getMappings(msg['hex'])
+                    msg['ac_type'] = planeInfo[2] if planeInfo[2] else "_"
+                    msg['ac_desc'] = planeInfo[3] if planeInfo[3] else "_"
+                    trackName = msg.get('flight', msg['hex']).strip()
+                    msg['track_name'] = trackName
 
-                if tracking:
-                    if not tracksObj.isTracking(msg['hex']):
-                        logging.info("%s (%s) was not in tracking volume before this", trackName, msg['hex'])
-                        mqttClient.publishTrackDiscoveryMsg(msg['hex'], trackName)
-                        time.sleep(0.1)  # delay to allow HA discovery to take place before updating
-                    mqttClient.publishTrackUpdateMsg(msg['hex'], msg)
-                else:
-                    logging.info("%s not in tracking volume", msg['hex'])
-                    if tracksObj.isTracking(msg['hex']):
-                        logging.info("%s was in tracking volume before this, and now it's not", msg['hex'])
-                        tracksObj.removeTrack(msg['hex'])  # staleHandler will send the null state update
-                tracksObj.updateTrack(tracking, msgTime, msg)
+                    if tracking:
+                        if not trksObj.isTracking(msg['hex']):
+                            logging.debug("%s (%s) was not in tracking volume before this", trackName, msg['hex'])
+                            mqttClient.publishTrackDiscoveryMsg(msg['hex'], trackName)
+                            # delay to allow HA discovery to take place before updating
+                            threading.Timer(0.1, mqttClient.publishTrackUpdateMsg, args=[msg['hex'], dict(msg)]).start()
+                        else:
+                            mqttClient.publishTrackUpdateMsg(msg['hex'], msg)
+                        trksObj.updateTrack(tracking, msgTime, msg)
+                    else:
+                        logging.debug("%s not in tracking volume", msg['hex'])
+                        if trksObj.isTracking(msg['hex']):
+                            logging.debug("%s was in tracking volume before this, and now it's not", msg['hex'])
+                            trksObj.removeTrack(msg['hex'])  # staleHandler will send the null state update
+                        else:
+                            trksObj.updateTrack(tracking, msgTime, msg)
 
-            mqttClient.publishTrackingCountUpdateMsg(len(tracksObj.trackingTrackIds()))
-            mqttClient.publishTracksCountUpdateMsg(tracksObj.numberOfTracks())
+                mqttClient.publishTrackingCountUpdateMsg(len(trksObj.trackingTrackIds()))
+                mqttClient.publishTracksCountUpdateMsg(trksObj.numberOfTracks())
+            except Exception:
+                logging.exception("Exception in newMessages")
         return newMessages
 
     newMessagesHandler = createNewMessagesHandler(aircraftDbObj, rxSiteObj, tracksObj, mqttClient)
 
     dumpDir = Path(options['adsbPath'])
+
+    signal.signal(signal.SIGUSR1, usr1Handler)   # 'kill -USR1' to print current tracks
 
     #### FIXME decide to implement this or not
     '''
@@ -349,8 +352,7 @@ def run(options):
     '''
 
     mqttClient.publishServiceStateMsg(True)
-    logging.info("Published Service state True @ %s",
-                 datetime.fromtimestamp(time.time()))
+    logging.info("Published Service state True @ %s", datetime.now())
 
     observer = PollingObserver()
     aircraftJsonPath = dumpDir / AIRCRAFT_JSON_FILE
@@ -360,7 +362,8 @@ def run(options):
     logging.debug("Watching %s...", str(aircraftJsonPath))
     try:
         while observer.is_alive() and not stopEvent.is_set():
-            time.sleep(1.0)  # 1sec poll
+            if stopEvent.wait(1.0):
+                break
             if time.time() - handler.lastChanged > FILE_UNCHANGED_TIMEOUT:
                 logging.error("No update of %s for %s secs",
                               aircraftJsonPath, FILE_UNCHANGED_TIMEOUT)
@@ -375,10 +378,13 @@ def run(options):
     tracksObj.removeAllTracks()
     mqttClient.publishTracksCountUpdateMsg(0)
     mqttClient.publishTrackingCountUpdateMsg(0)
-    mqttClient.publishServiceStateMsg(False)
+    info = mqttClient.publishServiceStateMsg(False)
     logging.info("Published zero to Tracks and Tracking counts and Service state False @ %s",
-                 datetime.fromtimestamp(time.time()))
-    time.sleep(0.6)  # allow mqtt message to be sent before exiting
+                 datetime.now())
+    try:
+        info.wait_for_publish(timeout=5.0)
+    except (ValueError, RuntimeError) as e:
+        logging.warning("MQTT flush failed: %s", e)
     tracksObj.stopGarbageCollect()
     logging.debug("Shutdown complete, exiting")
 
