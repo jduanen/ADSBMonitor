@@ -89,7 +89,7 @@ class ExitGracefully:
 def getOpts():
     ap = argparse.ArgumentParser()
     ap.add_argument(
-        "-a", "--altitude", metavar=["min", "max"], type=float, nargs=2,
+        "-a", "--altitude", metavar=["min", "max"], type=int, nargs=2,
         help="Min/max vertical distance filter constraint (from receiver in Feet)")
     ap.add_argument(
         "-b", "--mqttHost", action="store", type=str,
