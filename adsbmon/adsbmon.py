@@ -47,12 +47,9 @@ AIRCRAFT_JSON_FILE = "aircraft.json"
 
 MQTT_CLIENT_ID = "adsb_vehicles"
 
-MAX_DISTANCE = 100  # limit max possible distance to 100NM
-
 DEFAULTS = {
     'altitude': FilterConstraints(),
     'groundDistance': FilterConstraints(),
-    'interval': 60.0,
     'logFile': None,
     'logLevel': "WARNING",
     'mqttHost': "homeassistant.lan",
@@ -61,7 +58,7 @@ DEFAULTS = {
     'mqttPasswd': None,
     'mqttKeepalive': 60,  # 1min
     'name': "Home",
-    'readHistory': False,
+    #'readHistory': False,
     'slantDistance': FilterConstraints(),
     'verbose': None
 }
@@ -77,7 +74,7 @@ class ExitGracefully:
         signal.signal(signal.SIGHUP, self._signalHandler)   # terminal closed
 
     def _signalHandler(self, sig, frame):
-        ''' Catch SIGHUP to force a restart and SIGINT to stop
+        ''' Signals set the stop event (which should cause a cleanup and exit)
         '''
         match sig:
             case signal.SIGHUP:
@@ -110,9 +107,6 @@ def getOpts():
         "-d", "--dbFilePath", action="store", type=str,
         help="Path to the plane database")
     ap.add_argument(
-        "-i", "--interval", action="store", type=float,
-        help="Interval between publishing MQTT messages (in secs)")
-    ap.add_argument(
         "-k", "--mqttKeepalive", action="store", type=int,
         help="MQTT connection keep alive time (secs)")
     ap.add_argument(
@@ -134,9 +128,9 @@ def getOpts():
     ap.add_argument(
         "-p", "--position", metavar=("lat", "lon", "alt"), type=float, nargs=3,
         help="Position: <lat> <lon> <alt>")
-    ap.add_argument(
-        "-r", "--readHistory", action="store_true", default=False,
-        help="Read history files on startup")
+    #ap.add_argument(
+    #    "-r", "--readHistory", action="store_true",
+    #    help="Read history files on startup")
     ap.add_argument(
         "-s", "--slantDistance", metavar=["min", "max"], type=float, nargs=2,
         help="Min/max slant distance filter constraint (from receiver in NM)")
@@ -209,8 +203,12 @@ def getOpts():
                       c['altitude'][0], c['altitude'][1])
         sys.exit(1)
 
-    if 'adsbPath' not in c:
-        logging.error("Must specify the path to where dump1090-fa stores its files")
+    if not c['dbFilePath'] or Path(c['dbFilePath']).is_file():
+        logging.error("Must provide valid path to the AircraftDB")
+        sys.exit(1)
+
+    if not Path(c['adsbPath']).is_dir():
+        logging.error("adsbPath does not exist or is not a directory: %s", c['adsbPath'])
         sys.exit(1)
     return c
 
@@ -218,7 +216,6 @@ def getOpts():
 def run(options):
     def usr1Handler(sig, frame):
         tracksObj.printAll()
-    signal.signal(signal.SIGUSR1, usr1Handler)   # 'kill -USR1' to print current tracks
 
     stopEvent = threading.Event()
     ExitGracefully(stopEvent)
@@ -276,58 +273,65 @@ def run(options):
             ''' Function that gets called each time a new list of messages is
                  written to the log file.
             '''
-            msgTime = data['now']
-            for msg in data['aircraft']:
-                if not {'lat', 'lon'} <= msg.keys():
-                    logging.warning("Message is missing lat or lon, skipping (%s)", msg['hex'])
-                    continue
-                else:
-                    if 'alt_geom' in msg and msg['alt_geom']:
-                        alt = msg['alt_geom']
-                    elif 'alt_baro' in msg and msg['alt_baro']:
-                        alt = msg['alt_baro']
-                    else:
-                        logging.debug("Message is missing altitude field, skipping (%s)", msg['hex'])
+            try:
+                msgTime = data['now']
+                for msg in data['aircraft']:
+                    if not {'lat', 'lon'} <= msg.keys():
+                        logging.warning("Message is missing lat or lon, skipping (%s)", msg['hex'])
                         continue
-                alt = 0 if alt == 'ground' else alt
-                msg['alt'] = alt
+                    else:
+                        if 'alt_geom' in msg and msg['alt_geom']:
+                            alt = msg['alt_geom']
+                        elif 'alt_baro' in msg and msg['alt_baro']:
+                            alt = msg['alt_baro']
+                        else:
+                            logging.debug("Message is missing altitude field, skipping (%s)", msg['hex'])
+                            continue
+                    alt = 0 if alt == 'ground' else alt
+                    msg['alt'] = alt
 
-                if msg['hex'].startswith('~'):
-                    msg['hex'] = '_' + msg['hex'][1:]
+                    if msg['hex'].startswith('~'):
+                        msg['hex'] = '_' + msg['hex'][1:]
 
-                msg['g_dist'] = round(rxObj.groundDistanceNM(msg['lat'], msg['lon']), 2)
-                msg['s_dist'] = round(rxObj.slantDistanceNM(msg['lat'], msg['lon'], alt), 2)
+                    msg['g_dist'] = round(rxObj.groundDistanceNM(msg['lat'], msg['lon']), 2)
+                    msg['s_dist'] = round(rxObj.slantDistanceNM(msg['lat'], msg['lon'], alt), 2)
 
-                trackPosition = Position(msg['lat'], msg['lon'], alt)
-                tracking = rxObj.withinTrackingVolume(trackPosition)
-                logging.debug("Track %s @ %s: tracking=%d", msg['hex'], trackPosition, tracking)
+                    trackPosition = Position(msg['lat'], msg['lon'], alt)
+                    tracking = rxObj.withinTrackingVolume(trackPosition)
+                    logging.debug("Track %s @ %s: tracking=%d", msg['hex'], trackPosition, tracking)
 
-                planeInfo = aircraftDatabase.getMappings(msg['hex'])
-                msg['ac_type'] = planeInfo[2] if planeInfo[2] else "_"
-                msg['ac_desc'] = planeInfo[3] if planeInfo[3] else "_"
-                trackName = msg.get('flight', msg['hex']).strip()
-                msg['track_name'] = trackName
+                    planeInfo = aircraftDatabase.getMappings(msg['hex'])
+                    msg['ac_type'] = planeInfo[2] if planeInfo[2] else "_"
+                    msg['ac_desc'] = planeInfo[3] if planeInfo[3] else "_"
+                    trackName = msg.get('flight', msg['hex']).strip()
+                    msg['track_name'] = trackName
 
-                if tracking:
-                    if not tracksObj.isTracking(msg['hex']):
-                        logging.info("%s (%s) was not in tracking volume before this", trackName, msg['hex'])
-                        mqttClient.publishTrackDiscoveryMsg(msg['hex'], trackName)
-                        time.sleep(0.1)  # delay to allow HA discovery to take place before updating
-                    mqttClient.publishTrackUpdateMsg(msg['hex'], msg)
-                else:
-                    logging.info("%s not in tracking volume", msg['hex'])
-                    if tracksObj.isTracking(msg['hex']):
-                        logging.info("%s was in tracking volume before this, and now it's not", msg['hex'])
-                        tracksObj.removeTrack(msg['hex'])  # staleHandler will send the null state update
-                tracksObj.updateTrack(tracking, msgTime, msg)
+                    if tracking:
+                        if not tracksObj.isTracking(msg['hex']):
+                            logging.info("%s (%s) was not in tracking volume before this", trackName, msg['hex'])
+                            mqttClient.publishTrackDiscoveryMsg(msg['hex'], trackName)
+                            time.sleep(0.1)  # delay to allow HA discovery to take place before updating
+                        mqttClient.publishTrackUpdateMsg(msg['hex'], msg)
+                        tracksObj.updateTrack(tracking, msgTime, msg)
+                    else:
+                        logging.info("%s not in tracking volume", msg['hex'])
+                        if tracksObj.isTracking(msg['hex']):
+                            logging.info("%s was in tracking volume before this, and now it's not", msg['hex'])
+                            tracksObj.removeTrack(msg['hex'])  # staleHandler will send the null state update
+                        else:
+                            tracksObj.updateTrack(tracking, msgTime, msg)
 
-            mqttClient.publishTrackingCountUpdateMsg(len(tracksObj.trackingTrackIds()))
-            mqttClient.publishTracksCountUpdateMsg(tracksObj.numberOfTracks())
+                mqttClient.publishTrackingCountUpdateMsg(len(tracksObj.trackingTrackIds()))
+                mqttClient.publishTracksCountUpdateMsg(tracksObj.numberOfTracks())
+            except Exception as e:
+                logging.exception("Exception in newMessages: %s", e)
         return newMessages
 
     newMessagesHandler = createNewMessagesHandler(aircraftDbObj, rxSiteObj, tracksObj, mqttClient)
 
     dumpDir = Path(options['adsbPath'])
+
+    signal.signal(signal.SIGUSR1, usr1Handler)   # 'kill -USR1' to print current tracks
 
     #### FIXME decide to implement this or not
     '''
