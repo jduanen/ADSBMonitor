@@ -157,7 +157,7 @@ def getOpts():
             print(f"ERROR: Invalid configuration file path: {configFilePath}", file=sys.stderr)
             sys.exit(1)
         with open(configFilePath, "r", encoding="utf-8") as confFile:
-            fileOpts = list(yaml.load_all(confFile, Loader=yaml.Loader))
+            fileOpts = list(yaml.load_all(confFile, Loader=yaml.SafeLoader))
             if len(fileOpts) >= 1:
                 conf['fileOpts'] = fileOpts[0]
                 if len(fileOpts) > 1:
@@ -187,6 +187,10 @@ def getOpts():
         logging.error("Must give position of receiver")
         sys.exit(1)
 
+    for key in ('groundDistance', 'slantDistance', 'altitude'):
+        if isinstance(c[key], list):
+            c[key] = FilterConstraints(*c[key])
+
     if c['groundDistance'].min is not None and c['groundDistance'].max is not None and
        c['groundDistance'].min >= c['groundDistance'].max:
         logging.error("Invalid constraint: ground distance min %f >= max %f NM",
@@ -203,7 +207,7 @@ def getOpts():
                       c['altitude'][0], c['altitude'][1])
         sys.exit(1)
 
-    if not c['dbFilePath'] or Path(c['dbFilePath']).is_file():
+    if not c['dbFilePath'] or not Path(c['dbFilePath']).is_file():
         logging.error("Must provide valid path to the AircraftDB")
         sys.exit(1)
 
@@ -279,14 +283,13 @@ def run(options):
                     if not {'lat', 'lon'} <= msg.keys():
                         logging.warning("Message is missing lat or lon, skipping (%s)", msg['hex'])
                         continue
+                    if 'alt_geom' in msg and msg['alt_geom']:
+                        alt = msg['alt_geom']
+                    elif 'alt_baro' in msg and msg['alt_baro']:
+                        alt = msg['alt_baro']
                     else:
-                        if 'alt_geom' in msg and msg['alt_geom']:
-                            alt = msg['alt_geom']
-                        elif 'alt_baro' in msg and msg['alt_baro']:
-                            alt = msg['alt_baro']
-                        else:
-                            logging.debug("Message is missing altitude field, skipping (%s)", msg['hex'])
-                            continue
+                        logging.debug("Message is missing altitude field, skipping (%s)", msg['hex'])
+                        continue
                     alt = 0 if alt == 'ground' else alt
                     msg['alt'] = alt
 
@@ -310,8 +313,10 @@ def run(options):
                         if not tracksObj.isTracking(msg['hex']):
                             logging.info("%s (%s) was not in tracking volume before this", trackName, msg['hex'])
                             mqttClient.publishTrackDiscoveryMsg(msg['hex'], trackName)
-                            time.sleep(0.1)  # delay to allow HA discovery to take place before updating
-                        mqttClient.publishTrackUpdateMsg(msg['hex'], msg)
+                            # delay to allow HA discovery to take place before updating
+                            threading.Time(0.1, mqttClient.publishTrackUpdateMsg, args=[msg['hex'], dict(msg)]).start()
+                        else:
+                            mqttClient.publishTrackUpdateMsg(msg['hex'], msg)
                         tracksObj.updateTrack(tracking, msgTime, msg)
                     else:
                         logging.info("%s not in tracking volume", msg['hex'])
