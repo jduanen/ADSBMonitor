@@ -192,3 +192,60 @@ Check status of all services:
   - fed by large number of receivers
   - less censoring (for now)
 * <?tools?>
+
+## adsbmon.py Application
+
+ADSBMonitor watches ADS-B data from `readsb` (or `dump1090-fa`) running on a Raspberry Pi and publishes aircraft tracks to Home Assistant via MQTT.
+
+### Setup
+
+```bash
+python3 -m venv adsbVenv
+source adsbVenv/bin/activate
+pip install -r requirements.txt
+```
+
+### Running
+
+```bash
+# adsbmon: MQTT publisher
+python adsbmon/adsbmon.py -c adsbmon/config.yaml /run/readsb/
+```
+
+Options precedence: **CLI args → config file → defaults**. The `position` arg (`-p lat lon alt`) is required for `adsbmon`; it can be set in the config YAML instead.
+
+Send `SIGUSR1` to a running process (`kill -USR1 <pid>`) to dump all current tracks to stdout.
+
+### Architecture
+
+The data flow:
+1. `readsb` writes `aircraft.json` to `/run/readsb/` at ~1Hz
+2. `JsonFileHandler` (watchdog `PollingObserver`) detects file changes and parses the JSON
+3. Each aircraft message is enriched (distances computed, DB lookup) and filtered against `ReceiverSite` spatial volume constraints
+4. `Tracks` manages active tracks in memory with thread-safe access and a 10-second GC timer
+5. `AdsbMqtt` publishes Home Assistant MQTT discovery messages and per-track state updates
+
+#### Shared modules (`common/`)
+
+- **`ReceiverSite`** — encapsulates the receiver's GPS position and spatial volume filter constraints (`FilterConstraints` namedtuple with `min`/`max`). Uses `geographiclib` for geodesic distance; also computes slant distance (Pythagorean from ground distance + altitude). `withinTrackingVolume()` checks all three constraint types (ground NM, slant NM, altitude ft).
+- **`Tracks`** — thread-safe dict of active tracks keyed by ICAO hex ID. Tracks with `tracking=True` are inside the filter volume. GC runs every 10 seconds; calls `staleTrackHandler(hexId)` before deleting a track. `removeTrack()` and `removeAllTracks()` also invoke the stale handler (used for cleanup on shutdown).
+- **`AircraftDB`** — loads `lib/flightaware-*.csv` into memory. CSV format: `hexCode,tailNumber,aircraftType,aircraftCode`. `getMappings(hexCode)` returns a 4-tuple; indices 2 and 3 are aircraft type and description code.
+- **`JsonFileHandler`** — `watchdog.FileSystemEventHandler` subclass. Listens for `on_created` events (readsb atomically replaces the file), validates the `now`/`messages`/`aircraft` keys, then calls the `newMessages` callback with the parsed dict.
+- **`BaseMqtt`** — wraps `paho-mqtt`. `publishJson()` accepts either a string or a serializable object and returns `MQTTMessageInfo` for optional `.wait_for_publish()`.
+
+#### MQTT topics (`AdsbMqtt`)
+
+| Message type | Topic | Retained |
+|---|---|---|
+| Service discovery | `homeassistant/binary_sensor/adsb_monitor/status/config` | Yes |
+| Service state | `adsb/monitor/status` | Yes |
+| Track discovery | `homeassistant/sensor/adsb_<hexId>/config` | Yes |
+| Track state | `adsb/vehicles/<hexId>/state` | No |
+| Track count | `adsb/monitor/count` | Yes |
+| Tracking count | `adsb/monitor/tracking` | Yes |
+
+Removing a track sends an empty string to its discovery topic (un-registers it from HA). There is a 100ms `threading.Timer` delay between publishing a new track's discovery message and its first state update, to allow HA to register the entity first.
+
+#### Hex ID normalization
+
+ICAO hex IDs starting with `~` (MLAT-derived) are prefixed with `_` instead (MQTT topic-safe): `~abc123` → `_abc123`.
