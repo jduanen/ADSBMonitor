@@ -13,7 +13,6 @@ import json
 import logging
 import os
 from pathlib import Path
-from pprint import pprint
 import signal
 import sys
 import threading
@@ -35,8 +34,6 @@ from common.AircraftDB import AircraftDB
 from common.JsonFileHandler import JsonFileHandler
 from common.ReceiverSite import ReceiverSite, FilterConstraints
 from common.Tracks import Tracks
-
-import pdb  ## pdb.set_trace()
 
 
 STALE_TRACK_TIME = 28  # garbage collect records after this many secs
@@ -233,11 +230,10 @@ def run(options):
     homePosition = Position(options['position'][0], options['position'][1],
                             options['position'][2])
 
-    groundConstraints = FilterConstraints(options['groundDistance'][0], options['groundDistance'][1])
-    slantConstraints = FilterConstraints(options['slantDistance'][0], options['slantDistance'][1])
-    verticalConstraints = FilterConstraints(options['altitude'][0], options['altitude'][1])
-    rxSiteObj = ReceiverSite(options['name'], homePosition, groundConstraints,
-                             slantConstraints, verticalConstraints)
+    rxSiteObj = ReceiverSite(options['name'], Position(*options['position']),
+                             options['groundDistance'],
+                             options['slantDistance'],
+                             options['altitude'])
     logging.info(repr(rxSiteObj))
 
     try:
@@ -280,6 +276,9 @@ def run(options):
             try:
                 msgTime = data['now']
                 for msg in data['aircraft']:
+                    if 'hex' not in msg:
+                        logging.warning("Malformed message, no 'hex' field, skipping message")
+                        continue
                     if not {'lat', 'lon'} <= msg.keys():
                         logging.warning("Message is missing lat or lon, skipping (%s)", msg['hex'])
                         continue
@@ -311,17 +310,17 @@ def run(options):
 
                     if tracking:
                         if not tracksObj.isTracking(msg['hex']):
-                            logging.info("%s (%s) was not in tracking volume before this", trackName, msg['hex'])
+                            logging.debug("%s (%s) was not in tracking volume before this", trackName, msg['hex'])
                             mqttClient.publishTrackDiscoveryMsg(msg['hex'], trackName)
                             # delay to allow HA discovery to take place before updating
-                            threading.Time(0.1, mqttClient.publishTrackUpdateMsg, args=[msg['hex'], dict(msg)]).start()
+                            threading.Timer(0.1, mqttClient.publishTrackUpdateMsg, args=[msg['hex'], dict(msg)]).start()
                         else:
                             mqttClient.publishTrackUpdateMsg(msg['hex'], msg)
                         tracksObj.updateTrack(tracking, msgTime, msg)
                     else:
-                        logging.info("%s not in tracking volume", msg['hex'])
+                        logging.debug("%s not in tracking volume", msg['hex'])
                         if tracksObj.isTracking(msg['hex']):
-                            logging.info("%s was in tracking volume before this, and now it's not", msg['hex'])
+                            logging.debug("%s was in tracking volume before this, and now it's not", msg['hex'])
                             tracksObj.removeTrack(msg['hex'])  # staleHandler will send the null state update
                         else:
                             tracksObj.updateTrack(tracking, msgTime, msg)
