@@ -53,12 +53,12 @@ class AdsbMqtt(BaseMqtt):
                 "sw": self.version
             }
         }
-        self.publishJson(topic, msg, retain=True)
+        return self.publishJson(topic, msg, retain=True)
 
     def publishServiceStateMsg(self, online):
         topic = "adsb/monitor/status"
         msg = "online" if online else "offline"
-        self.publishJson(topic, msg, retain=True)
+        return self.publishJson(topic, msg, retain=True)
 
     def publishTrackDiscoveryMsg(self, hexId, trackName):
         topic = f"homeassistant/sensor/adsb_{hexId}/config"
@@ -80,15 +80,15 @@ class AdsbMqtt(BaseMqtt):
                 "sw": self.version
             }
         }
-        self.publishJson(topic, msg, retain=True)
+        return self.publishJson(topic, msg, retain=True)
 
     def publishNullTrackDiscoveryMsg(self, hexId):
         topic = f"homeassistant/sensor/adsb_{hexId}/config"
-        self.publishJson(topic, "", retain=True)
+        return self.publishJson(topic, "", retain=True)
 
     def publishTrackUpdateMsg(self, hexId, message):
         topic = f"adsb/vehicles/{hexId}/state"
-        self.publishJson(topic, message, retain=False)
+        return self.publishJson(topic, message, retain=False)
 
     def publishTracksCountDiscoveryMsg(self):
         topic = "homeassistant/sensor/adsb_monitor/count/config"
@@ -105,16 +105,16 @@ class AdsbMqtt(BaseMqtt):
                 "sw": self.version
             }
         }
-        self.publishJson(topic, msg, retain=True)
+        return self.publishJson(topic, msg, retain=True)
 
     def publishNullTracksCountDiscoveryMsg(self):
         topic = "homeassistant/sensor/adsb_monitor/count/config"
-        self.publishJson(topic, "", retain=True)
+        return self.publishJson(topic, "", retain=True)
 
     def publishTracksCountUpdateMsg(self, numTracks):
         topic = "adsb/monitor/count"
         msg = numTracks
-        self.publishJson(topic, msg, retain=True)
+        return self.publishJson(topic, msg, retain=True)
 
     def publishTrackingCountDiscoveryMsg(self):
         topic = "homeassistant/sensor/adsb_monitor/tracking/config"
@@ -131,13 +131,13 @@ class AdsbMqtt(BaseMqtt):
                 "sw": self.version
             }
         }
-        self.publishJson(topic, msg, retain=True)
+        return self.publishJson(topic, msg, retain=True)
 
     def publishTrackingCountNullMsg(self):
         topic = "homeassistant/sensor/adsb_monitor/tracking/config"
-        self.publishJson(topic, "", retain=True)
+        return self.publishJson(topic, "", retain=True)
 
     def publishTrackingCountUpdateMsg(self, numTracks):
         topic = "adsb/monitor/tracking"
         msg = numTracks
-        self.publishJson(topic, msg, retain=True)
+        return self.publishJson(topic, msg, retain=True)
