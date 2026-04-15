@@ -290,8 +290,8 @@ def run(options):
                     if msg['hex'].startswith('~'):
                         msg['hex'] = '_' + msg['hex'][1:]
 
-                    msg['g_dist'] = round(rxObj.groundDistanceNM(msg['lat'], msg['lon']), 2)
-                    msg['s_dist'] = round(rxObj.slantDistanceNM(msg['lat'], msg['lon'], alt), 2)
+                    msg['g_dist'] = round(rxObj.groundDistanceNM(msg['lat'], msg['lon']), 4)
+                    msg['s_dist'] = round(rxObj.slantDistanceNM(msg['lat'], msg['lon'], alt), 4)
 
                     trackPosition = Position(msg['lat'], msg['lon'], alt)
                     tracking = rxObj.withinTrackingVolume(trackPosition)
