@@ -188,18 +188,15 @@ def getOpts():
         if isinstance(c[key], list):
             c[key] = FilterConstraints(*c[key])
 
-    if c['groundDistance'].min is not None and c['groundDistance'].max is not None and
-       c['groundDistance'].min >= c['groundDistance'].max:
+    if c['groundDistance'].min is not None and c['groundDistance'].max is not None and c['groundDistance'].min >= c['groundDistance'].max:
         logging.error("Invalid constraint: ground distance min %f >= max %f NM",
                       c['groundDistance'][0], c['groundDistance'][1])
         sys.exit(1)
-    if c['slantDistance'].min is not None and c['slantDistance'].max is not None and
-       c['slantDistance'].min  >= c['slantDistance'].max:
+    if c['slantDistance'].min is not None and c['slantDistance'].max is not None and c['slantDistance'].min  >= c['slantDistance'].max:
         logging.error("Invalid constraint: slant distance min %f >= max %f NM",
                       c['slantDistance'][0], c['slantDistance'][1])
         sys.exit(1)
-    if c['altitude'].min is not None and c['altitude'].max is not None and
-       c['altitude'].min  >= c['altitude'].max:
+    if c['altitude'].min is not None and c['altitude'].max is not None and c['altitude'].min  >= c['altitude'].max:
         logging.error("Invalid constraint: altitude/vertical distance min %f >= max %f NM",
                       c['altitude'][0], c['altitude'][1])
         sys.exit(1)
