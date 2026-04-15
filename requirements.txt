@@ -1,4 +1,6 @@
 geographiclib
 paho.mqtt
+matplotlib
+numpy
 PyYAML
 watchdog
