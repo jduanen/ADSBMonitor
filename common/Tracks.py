@@ -122,7 +122,7 @@ class Tracks:
 
     def removeAllTracks(self):
         with self._lock:
-            hexIds = [hexId in self.tracks.keys() if self.tracks[hexId].get('inVolume')]
+            hexIds = [hexId for hexId in self.tracks.keys() if self.tracks[hexId].get('inVolume')]
             self.tracks.clear()
         for hexId in hexIds:
             self.staleTrackHandler(hexId)
