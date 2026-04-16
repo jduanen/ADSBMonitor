@@ -244,8 +244,7 @@ def run(options):
              dealing with a stale track that is to be garbage collected
         '''
         def staleTrack(staleHexId):
-            ''' Called whenever a stale track is to be deleted
-                N.B. This is called before the track is deleted
+            ''' Called whenever a stale track that was being tracked is to be deleted
                 This is unnecessary, but I might want to add other stuff later
             '''
             mqttClient.publishNullTrackDiscoveryMsg(staleHexId)
