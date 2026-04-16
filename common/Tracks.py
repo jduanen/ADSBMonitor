@@ -68,7 +68,7 @@ class Tracks:
                 if (time.time() - lastSeenTime) > self.staleTime:
                     staleHexIds.append(hexId)
                     del self.tracks[hexId]
-        for hexId in staleHexIds:
+        for hexId in staleHexIds and self.isTracking(hexId):
             self.staleTrackHandler(hexId)
             logging.info("Delete: %s", hexId)
         self._startTimer()
