@@ -4,13 +4,13 @@
 #
 # tracks
 #   - <hexId>
-#     - tracking: <bool>
+#     - inVolume: <bool>
 #     - msgTime: <time>
 #     - msg: <adsbMsg>
 #       * hex: <hexId>
 #       ...
 #   - <hexId>
-#     - tracking: <bool>
+#     - inVolume: <bool>
 #     - msgTime: <time>
 #     - msg: <adsbMsg>
 #       * hex: <hexId>
@@ -66,7 +66,7 @@ class Tracks:
                     continue
                 lastSeenTime = message['msgTime'] - seen
                 if (time.time() - lastSeenTime) > self.staleTime:
-                    if self.tracks[hexId].get('tracking'):
+                    if self.tracks[hexId].get('inVolume'):
                         trackedStaleHexIds.append(hexId)
                     del self.tracks[hexId]
         for hexId in trackedStaleHexIds:
@@ -74,13 +74,13 @@ class Tracks:
             logging.info("Delete: %s", hexId)
         self._startTimer()
 
-    def updateTrack(self, tracking, msgTime, msg):
+    def updateTrack(self, inVolume, msgTime, msg):
         hexId = msg['hex']
         with self._lock:
             if hexId not in self.tracks:
-                self.tracks[hexId] = {'tracking': tracking, 'msgTime': msgTime, 'msg': msg}
+                self.tracks[hexId] = {'inVolume': inVolume, 'msgTime': msgTime, 'msg': msg}
             else:
-                self.tracks[hexId]['tracking'] = tracking
+                self.tracks[hexId]['inVolume'] = inVolume
                 self.tracks[hexId]['msgTime'] = msgTime
                 self.tracks[hexId]['msg'] |= msg
 
@@ -104,15 +104,15 @@ class Tracks:
         with self._lock:
             return hexId in self.tracks
 
-    def isTracking(self, hexId):
+    def isInVolume(self, hexId):
         with self._lock:
             track = self.tracks.get(hexId)
-            return track['tracking'] if track else None
+            return track['inVolume'] if track else None
 
-    def trackingTrackIds(self):
+    def inVolumeTrackIds(self):
         with self._lock:
-            tracking = [hexId for hexId, track in self.tracks.items() if track['tracking']]
-        return tracking
+            inVolume = [hexId for hexId, track in self.tracks.items() if track['inVolume']]
+        return inVolume
 
     def removeTrack(self, hexId):
         self.staleTrackHandler(hexId)
@@ -122,7 +122,7 @@ class Tracks:
 
     def removeAllTracks(self):
         with self._lock:
-            hexIds = list(self.tracks.keys())
+            hexIds = [hexId in self.tracks.keys() if self.tracks[hexId].get('inVolume')]
             self.tracks.clear()
         for hexId in hexIds:
             self.staleTrackHandler(hexId)

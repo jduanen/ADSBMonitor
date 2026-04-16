@@ -11,4 +11,4 @@ if [ $# -lt 2 ]; then
     exit 1
 fi
 
-mosquitto_sub -h 192.168.166.5 -p 1883 -u $MQTT_USER -P $MQTT_PASSWD ${OPTIONS} -t 'adsb/monitor/tracking'
+mosquitto_sub -h 192.168.166.5 -p 1883 -u $MQTT_USER -P $MQTT_PASSWD ${OPTIONS} -t 'adsb/monitor/in_volume'

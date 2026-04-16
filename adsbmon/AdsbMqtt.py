@@ -12,9 +12,9 @@
 #  * publishTracksCountDiscoveryMsg:      "homeassistant/sensor/adsb_monitor/count/config"
 #  * publishNullTracksCountDiscoveryMsg:  "homeassistant/sensor/adsb_monitor/count/config"
 #  * publishTracksCountUpdateMsg:         "adsb/monitor/count"
-#  * publishTrackingCountDiscoveryMsg:    "homeassistant/sensor/adsb_monitor/tracking/config"
-#  * publishTrackingCountNullMsg:         "homeassistant/sensor/adsb_monitor/tracking/config"
-#  * publishTrackingCountUpdateMsg:       "adsb/monitor/tracking"
+#  * publishInVolumeCountDiscoveryMsg:    "homeassistant/sensor/adsb_monitor/in_volume/config"
+#  * publishInVolumeCountNullMsg:         "homeassistant/sensor/adsb_monitor/in_volume/config"
+#  * publishInVolumeCountUpdateMsg:       "adsb/monitor/in_volume"
 #
 
 import os
@@ -116,12 +116,12 @@ class AdsbMqtt(BaseMqtt):
         msg = numTracks
         return self.publishJson(topic, msg, retain=True)
 
-    def publishTrackingCountDiscoveryMsg(self):
-        topic = "homeassistant/sensor/adsb_monitor/tracking/config"
+    def publishInVolumeCountDiscoveryMsg(self):
+        topic = "homeassistant/sensor/adsb_monitor/in_volume/config"
         msg = {
-            "name": "ADS-B Monitor vehicles tracking count",
-            "state_topic": "adsb/monitor/tracking",
-            "unique_id": "adsb_monitor_tracking",
+            "name": "ADS-B Monitor vehicles InVolume count",
+            "state_topic": "adsb/monitor/in_volume",
+            "unique_id": "adsb_monitor_in_volume",
             "unit_of_measurement": "vehicles",
             "device_class": None,
             "state_class": "measurement",
@@ -133,11 +133,11 @@ class AdsbMqtt(BaseMqtt):
         }
         return self.publishJson(topic, msg, retain=True)
 
-    def publishTrackingCountNullMsg(self):
-        topic = "homeassistant/sensor/adsb_monitor/tracking/config"
+    def publishInVolumeCountNullMsg(self):
+        topic = "homeassistant/sensor/adsb_monitor/in_volume/config"
         return self.publishJson(topic, "", retain=True)
 
-    def publishTrackingCountUpdateMsg(self, numTracks):
-        topic = "adsb/monitor/tracking"
+    def publishInVolumeCountUpdateMsg(self, numTracks):
+        topic = "adsb/monitor/in_volume"
         msg = numTracks
         return self.publishJson(topic, msg, retain=True)

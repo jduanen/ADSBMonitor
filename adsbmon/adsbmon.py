@@ -256,8 +256,8 @@ def run(options):
 
     mqttClient.publishServiceDiscoveryMsg()
     mqttClient.publishTracksCountDiscoveryMsg()
-    mqttClient.publishTrackingCountDiscoveryMsg()
-    logging.info("Published Service, TracksCount, and TrackingCount discovery messages")
+    mqttClient.publishInVolumeCountDiscoveryMsg()
+    logging.info("Published Service, TracksCount, and InVolumeCount discovery messages")
 
     def createNewMessagesHandler(aircraftDatabase, rxObj, trksObj, mqttClient):
         ''' Returns a closure that captures instances of objects needed by the callback
@@ -293,8 +293,8 @@ def run(options):
                     msg['s_dist'] = round(rxObj.slantDistanceNM(msg['lat'], msg['lon'], alt), 4)
 
                     trackPosition = Position(msg['lat'], msg['lon'], alt)
-                    tracking = rxObj.withinTrackingVolume(trackPosition)
-                    logging.debug("Track %s @ %s: tracking=%s", msg['hex'], trackPosition, tracking)
+                    inVolume = rxObj.withinTrackingVolume(trackPosition)
+                    logging.debug("Track %s @ %s: inVolume=%s", msg['hex'], trackPosition, inVolume)
 
                     planeInfo = aircraftDatabase.getMappings(msg['hex'])
                     msg['ac_type'] = planeInfo[2] if planeInfo[2] else "_"
@@ -302,24 +302,24 @@ def run(options):
                     trackName = msg.get('flight', msg['hex']).strip()
                     msg['track_name'] = trackName
 
-                    if tracking:
-                        if not trksObj.isTracking(msg['hex']):
-                            logging.debug("%s (%s) was not in tracking volume before this", trackName, msg['hex'])
+                    if inVolume:
+                        if not trksObj.isInVolume(msg['hex']):
+                            logging.debug("%s (%s) was not in volume before this", trackName, msg['hex'])
                             mqttClient.publishTrackDiscoveryMsg(msg['hex'], trackName)
                             # delay to allow HA discovery to take place before updating
                             threading.Timer(0.1, mqttClient.publishTrackUpdateMsg, args=[msg['hex'], dict(msg)]).start()
                         else:
                             mqttClient.publishTrackUpdateMsg(msg['hex'], msg)
-                        trksObj.updateTrack(tracking, msgTime, msg)
+                        trksObj.updateTrack(inVolume, msgTime, msg)
                     else:
-                        logging.debug("%s not in tracking volume", msg['hex'])
-                        if trksObj.isTracking(msg['hex']):
-                            logging.debug("%s was in tracking volume before this, and now it's not", msg['hex'])
+                        logging.debug("%s not in volume", msg['hex'])
+                        if trksObj.isInVolume(msg['hex']):
+                            logging.debug("%s was in volume before this, and now it's not", msg['hex'])
                             trksObj.removeTrack(msg['hex'])  # staleHandler will send the null state update
                         else:
-                            trksObj.updateTrack(tracking, msgTime, msg)
+                            trksObj.updateTrack(inVolume, msgTime, msg)
 
-                mqttClient.publishTrackingCountUpdateMsg(len(trksObj.trackingTrackIds()))
+                mqttClient.publishInVolumeCountUpdateMsg(len(trksObj.inVolumeTrackIds()))
                 mqttClient.publishTracksCountUpdateMsg(trksObj.numberOfTracks())
             except Exception:
                 logging.exception("Exception in newMessages")
@@ -376,9 +376,9 @@ def run(options):
 
     tracksObj.removeAllTracks()
     mqttClient.publishTracksCountUpdateMsg(0)
-    mqttClient.publishTrackingCountUpdateMsg(0)
+    mqttClient.publishInVolumeCountUpdateMsg(0)
     info = mqttClient.publishServiceStateMsg(False)
-    logging.info("Published zero to Tracks and Tracking counts and Service state False @ %s",
+    logging.info("Published zero to Tracks and InVolume counts and Service state False @ %s",
                  datetime.now())
     try:
         info.wait_for_publish(timeout=5.0)
