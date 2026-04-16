@@ -58,7 +58,7 @@ class Tracks:
             self._timer.cancel()
 
     def _garbageCollect(self):
-        staleHexIds = []
+        trackedStaleHexIds = []
         with self._lock:
             for hexId, message in list(self.tracks.items()):
                 seen = message['msg'].get('seen', None)
@@ -66,9 +66,10 @@ class Tracks:
                     continue
                 lastSeenTime = message['msgTime'] - seen
                 if (time.time() - lastSeenTime) > self.staleTime:
-                    staleHexIds.append(hexId)
+                    if self.tracks[hexId].get('tracking'):
+                        trackedStaleHexIds.append(hexId)
                     del self.tracks[hexId]
-        for hexId in staleHexIds and self.isTracking(hexId):
+        for hexId in trackedStaleHexIds:
             self.staleTrackHandler(hexId)
             logging.info("Delete: %s", hexId)
         self._startTimer()
@@ -114,9 +115,9 @@ class Tracks:
         return tracking
 
     def removeTrack(self, hexId):
+        self.staleTrackHandler(hexId)
         with self._lock:
             self.tracks.pop(hexId, None)
-        self.staleTrackHandler(hexId)
         logging.info("remove: %s", hexId)
 
     def removeAllTracks(self):
@@ -128,4 +129,5 @@ class Tracks:
             logging.info("Remove: %s", hexId)
 
     def printAll(self):
-        json.dump(self.tracks, sys.stdout, indent=4, sort_keys=True)
+        with self._lock:
+            json.dump(self.tracks, sys.stdout, indent=4, sort_keys=True)
