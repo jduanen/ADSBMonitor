@@ -286,6 +286,7 @@ def print_report_and_reset():
         print(f"{'='*60}")
         print(f"  Resetting counters. Next report in {format_interval(report_interval)}...")
         print(f"{'='*60}\n")
+        sys.stdout.flush()
 
         # Clear the counts for the next period
         hex_counts.clear()
