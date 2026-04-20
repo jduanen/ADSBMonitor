@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 #
 # Subscribes to "adsb/vehicles/#" and collects:
-#   - Unique values for: hex, flight, category, ac_type, ac_desc, emergency
-#   - Min/max values for: gs, baro_rate, rssi, alt_baro, alt_geom, r_dist
+#   - Unique values (with counts) for: hex, flight, category, ac_type, ac_desc, emergency
+#   - Min/max values for: gs, baro_rate, rssi, alt_baro, alt_geom, r_dst
 #
 # Writes results to a JSON file periodically and on shutdown.
 #
@@ -28,9 +28,9 @@ DEFAULT_INTERVAL_SECONDS = 600  # 10 minutes
 DEFAULT_OUTPUT_FILE = "adsbFieldStats.json"
 
 UNIQUE_FIELDS = ("hex", "flight", "category", "ac_type", "ac_desc", "emergency")
-RANGE_FIELDS = ("gs", "baro_rate", "rssi", "alt_baro", "alt_geom", "r_dist")
+RANGE_FIELDS = ("gs", "baro_rate", "rssi", "alt_baro", "alt_geom", "r_dst")
 
-unique_values = {f: set() for f in UNIQUE_FIELDS}
+unique_values = {f: {} for f in UNIQUE_FIELDS}  # value -> count
 range_stats = {f: {"min": None, "max": None} for f in RANGE_FIELDS}
 lock = threading.Lock()
 running = True
@@ -150,7 +150,7 @@ def on_message(client, userdata, msg):
             for field in UNIQUE_FIELDS:
                 value = payload.get(field)
                 if value is not None and value != "":
-                    unique_values[field].add(value)
+                    unique_values[field][value] = unique_values[field].get(value, 0) + 1
 
             for field in RANGE_FIELDS:
                 value = payload.get(field)
@@ -175,7 +175,10 @@ def write_stats():
     with lock:
         data = {
             "generated": timestamp(),
-            "unique_values": {f: sorted(unique_values[f]) for f in UNIQUE_FIELDS},
+            "unique_values": {
+                f: {v: unique_values[f][v] for v in sorted(unique_values[f])}
+                for f in UNIQUE_FIELDS
+            },
             "range_stats": {f: dict(range_stats[f]) for f in RANGE_FIELDS},
         }
 
