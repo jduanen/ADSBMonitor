@@ -7,7 +7,7 @@ Type=simple
 User=jdn
 Group=jdn
 WorkingDirectory=/home/jdn/Code/ADSBMonitor/
-ExecStart=/home/jdn/Code/ADSBMonitor/adsbEnv/bin/python /home/jdn/Code/ADSBMonitor/adsbmon/adsbmon.py -c /home/jdn/ADSBMonitor/adsbmon/config.yaml /run/readsb
+ExecStart=/home/jdn/Code/ADSBMonitor/adsbEnv/bin/python /home/jdn/Code/ADSBMonitor/adsbmon/adsbmon.py -c /home/jdn/Code/ADSBMonitor/adsbmon/config.yaml /run/readsb
 Restart=on-failure
 
 [Install]
