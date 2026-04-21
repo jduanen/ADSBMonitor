@@ -1,0 +1,14 @@
+[Unit]
+Description=Monitor readsb output and emit MQTT messages to HA
+After=network.target
+
+[Service]
+Type=simple
+User=jdn
+Group=jdn
+WorkingDirectory=/home/jdn/Code/ADSBMonitor/
+ExecStart=/home/jdn/Code/ADSBMonitor/adsbEnv/bin/python /home/jdn/Code/ADSBMonitor/adsbmon/adsbmon.py -c /home/jdn/ADSBMonitor/adsbmon/config.yaml
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
