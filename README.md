@@ -11,8 +11,8 @@ Tool for logging and analyzing ADS-B data
 * ???? dual band (1090MHz and 978MHz) ?db antenna
 * images
 ![](./assets/adsbrx.jpg)
-![](raspi4b.jpg)
-![](splitterDongles.jpg)
+![](./assets/raspi4b.jpg)
+![](./assets/splitterDongles.jpg)
 
 ## Software
 * readsb: decodes 1090MHz ADS-B, provides API
