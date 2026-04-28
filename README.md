@@ -9,6 +9,10 @@ Tool for logging and analyzing ADS-B data
 * Nano Three (n3) SDR USB dongle (RTL2838, R820T)
 * ???? splitter
 * ???? dual band (1090MHz and 978MHz) ?db antenna
+* images
+![](./assets/raspi4b.jpg)
+![](./assets/splitterDongles.jpg)
+![](./assets/adsbrx.jpg)
 
 ## Software
 * readsb: decodes 1090MHz ADS-B, provides API
