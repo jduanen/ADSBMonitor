@@ -3,4 +3,5 @@ paho.mqtt
 matplotlib
 numpy
 PyYAML
+requests
 watchdog
