@@ -257,7 +257,9 @@ def run(options):
     mqttClient.publishServiceDiscoveryMsg()
     mqttClient.publishTracksCountDiscoveryMsg()
     mqttClient.publishInVolumeCountDiscoveryMsg()
-    logging.info("Published Service, TracksCount, and InVolumeCount discovery messages")
+    for rank in range(1, 4):
+        mqttClient.publishNearestDiscoveryMsg(rank)
+    logging.info("Published Service, TracksCount, InVolumeCount, and Nearest discovery messages")
 
     def createNewMessagesHandler(aircraftDatabase, rxObj, trksObj, mqttClient):
         ''' Returns a closure that captures instances of objects needed by the callback
@@ -321,6 +323,13 @@ def run(options):
 
                 mqttClient.publishInVolumeCountUpdateMsg(len(trksObj.inVolumeTrackIds()))
                 mqttClient.publishTracksCountUpdateMsg(trksObj.numberOfTracks())
+                _nearest = sorted(trksObj.getInVolumeTracks(),
+                                  key=lambda m: m.get('s_dist', float('inf')))
+                _empty = {'track_name': '---', 's_dist': None, 'g_dist': None,
+                          'alt': None, 'ac_type': '---', 'hex': '---'}
+                for _rank in range(1, 4):
+                    _data = _nearest[_rank - 1] if _rank <= len(_nearest) else _empty
+                    mqttClient.publishNearestUpdateMsg(_rank, _data)
             except Exception:
                 logging.exception("Exception in newMessages")
         return newMessages
@@ -377,6 +386,10 @@ def run(options):
     tracksObj.removeAllTracks()
     mqttClient.publishTracksCountUpdateMsg(0)
     mqttClient.publishInVolumeCountUpdateMsg(0)
+    _empty = {'track_name': '---', 's_dist': None, 'g_dist': None,
+              'alt': None, 'ac_type': '---', 'hex': '---'}
+    for rank in range(1, 4):
+        mqttClient.publishNearestUpdateMsg(rank, _empty)
     info = mqttClient.publishServiceStateMsg(False)
     logging.info("Published zero to Tracks and InVolume counts and Service state False @ %s",
                  datetime.now())
