@@ -33,6 +33,7 @@ from AdsbMqtt import AdsbMqtt
 from common.AircraftDB import AircraftDB
 from common.JsonFileHandler import JsonFileHandler
 from common.ReceiverSite import ReceiverSite, FilterConstraints
+from common.RouteDB import RouteDB
 from common.Tracks import Tracks
 
 
@@ -261,7 +262,7 @@ def run(options):
         mqttClient.publishNearestDiscoveryMsg(rank)
     logging.info("Published Service, TracksCount, InVolumeCount, and Nearest discovery messages")
 
-    def createNewMessagesHandler(aircraftDatabase, rxObj, trksObj, mqttClient):
+    def createNewMessagesHandler(aircraftDatabase, rxObj, trksObj, mqttClient, routeDb):
         ''' Returns a closure that captures instances of objects needed by the callback
              for use in dealing with new ADS-B messages
         '''
@@ -304,6 +305,19 @@ def run(options):
                     trackName = msg.get('flight', msg['hex']).strip()
                     msg['track_name'] = trackName
 
+                    callsign = msg.get('flight', '').strip()
+                    route = routeDb.getRoute(callsign) if callsign else None
+                    if route:
+                        msg['origin_iata'] = route['origin_iata']
+                        msg['origin'] = route['origin']
+                        msg['dest_iata'] = route['dest_iata']
+                        msg['dest'] = route['dest']
+                    else:
+                        msg['origin_iata'] = '---'
+                        msg['origin'] = '---'
+                        msg['dest_iata'] = '---'
+                        msg['dest'] = '---'
+
                     if inVolume:
                         if not trksObj.isInVolume(msg['hex']):
                             logging.debug("%s (%s) was not in volume before this", trackName, msg['hex'])
@@ -326,7 +340,9 @@ def run(options):
                 _nearest = sorted(trksObj.getInVolumeTracks(),
                                   key=lambda m: m.get('s_dist', float('inf')))
                 _empty = {'track_name': '---', 's_dist': '---', 'g_dist': '---',
-                          'alt': '---', 'ac_type': '---', 'hex': '---'}
+                          'alt': '---', 'ac_type': '---', 'hex': '---',
+                          'origin_iata': '---', 'origin': '---',
+                          'dest_iata': '---', 'dest': '---'}
                 for _rank in range(1, 4):
                     _data = _nearest[_rank - 1] if _rank <= len(_nearest) else _empty
                     mqttClient.publishNearestUpdateMsg(_rank, _data)
@@ -334,7 +350,8 @@ def run(options):
                 logging.exception("Exception in newMessages")
         return newMessages
 
-    newMessagesHandler = createNewMessagesHandler(aircraftDbObj, rxSiteObj, tracksObj, mqttClient)
+    routeDbObj = RouteDB()
+    newMessagesHandler = createNewMessagesHandler(aircraftDbObj, rxSiteObj, tracksObj, mqttClient, routeDbObj)
 
     dumpDir = Path(options['adsbPath'])
 
@@ -387,7 +404,9 @@ def run(options):
     mqttClient.publishTracksCountUpdateMsg(0)
     mqttClient.publishInVolumeCountUpdateMsg(0)
     _empty = {'track_name': '---', 's_dist': '---', 'g_dist': '---',
-              'alt': '---', 'ac_type': '---', 'hex': '---'}
+              'alt': '---', 'ac_type': '---', 'hex': '---',
+              'origin_iata': '---', 'origin': '---',
+              'dest_iata': '---', 'dest': '---'}
     for rank in range(1, 4):
         mqttClient.publishNearestUpdateMsg(rank, _empty)
     info = mqttClient.publishServiceStateMsg(False)
