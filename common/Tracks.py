@@ -114,6 +114,10 @@ class Tracks:
             inVolume = [hexId for hexId, track in self.tracks.items() if track['inVolume']]
         return inVolume
 
+    def getInVolumeTracks(self):
+        with self._lock:
+            return [track['msg'] for track in self.tracks.values() if track.get('inVolume')]
+
     def removeTrack(self, hexId):
         self.staleTrackHandler(hexId)
         with self._lock:
