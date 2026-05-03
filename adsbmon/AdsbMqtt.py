@@ -141,3 +141,30 @@ class AdsbMqtt(BaseMqtt):
         topic = "adsb/monitor/in_volume"
         msg = numTracks
         return self.publishJson(topic, msg, retain=True)
+
+    def publishNearestDiscoveryMsg(self, rank):
+        topic = f"homeassistant/sensor/adsb_nearest_{rank}/config"
+        msg = {
+            "name": f"ADS-B Nearest {rank}",
+            "unique_id": f"adsb_nearest_{rank}",
+            "state_topic": f"adsb/monitor/nearest/{rank}",
+            "value_template": "{{ value_json.track_name }}",
+            "json_attributes_topic": f"adsb/monitor/nearest/{rank}",
+            "json_attributes_template": "{{ value_json | tojson }}",
+            "device": MSG_DEVICE,
+            "device_class": None,
+            "state_class": None,
+            "origin": {
+                "name": self.__class__.__name__,
+                "sw": self.version
+            }
+        }
+        return self.publishJson(topic, msg, retain=True)
+
+    def publishNullNearestDiscoveryMsg(self, rank):
+        topic = f"homeassistant/sensor/adsb_nearest_{rank}/config"
+        return self.publishJson(topic, "", retain=True)
+
+    def publishNearestUpdateMsg(self, rank, data):
+        topic = f"adsb/monitor/nearest/{rank}"
+        return self.publishJson(topic, data, retain=True)
