@@ -325,8 +325,8 @@ def run(options):
                 mqttClient.publishTracksCountUpdateMsg(trksObj.numberOfTracks())
                 _nearest = sorted(trksObj.getInVolumeTracks(),
                                   key=lambda m: m.get('s_dist', float('inf')))
-                _empty = {'track_name': '---', 's_dist': None, 'g_dist': None,
-                          'alt': None, 'ac_type': '---', 'hex': '---'}
+                _empty = {'track_name': '---', 's_dist': '---', 'g_dist': '---',
+                          'alt': '---', 'ac_type': '---', 'hex': '---'}
                 for _rank in range(1, 4):
                     _data = _nearest[_rank - 1] if _rank <= len(_nearest) else _empty
                     mqttClient.publishNearestUpdateMsg(_rank, _data)
