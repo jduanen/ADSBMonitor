@@ -386,8 +386,8 @@ def run(options):
     tracksObj.removeAllTracks()
     mqttClient.publishTracksCountUpdateMsg(0)
     mqttClient.publishInVolumeCountUpdateMsg(0)
-    _empty = {'track_name': '---', 's_dist': None, 'g_dist': None,
-              'alt': None, 'ac_type': '---', 'hex': '---'}
+    _empty = {'track_name': '---', 's_dist': '---', 'g_dist': '---',
+              'alt': '---', 'ac_type': '---', 'hex': '---'}
     for rank in range(1, 4):
         mqttClient.publishNearestUpdateMsg(rank, _empty)
     info = mqttClient.publishServiceStateMsg(False)
