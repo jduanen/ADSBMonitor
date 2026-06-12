@@ -218,6 +218,25 @@ python adsbmon/adsbmon.py -c adsbmon/config.yaml /run/readsb/
 
 Options precedence: **CLI args → config file → defaults**. The `position` arg (`-p lat lon alt`) is required for `adsbmon`; it can be set in the config YAML instead.
 
+| Flag | Description |
+|------|-------------|
+| `-A, --airportCsv PATH` | OurAirports CSV for IATA→ICAO airport code conversion (see `AircraftRoute/scripts/getAirportCodes.sh`) |
+| `-a, --altitude min max` | Min/max altitude filter (ft) |
+| `-b, --mqttHost HOST` | MQTT broker hostname |
+| `-c, --configFilePath PATH` | YAML config file |
+| `-d, --dbFilePath PATH` | Aircraft database CSV (required) |
+| `-g, --groundDistance min max` | Min/max ground distance filter (NM) |
+| `-k, --mqttKeepalive SECS` | MQTT keepalive interval |
+| `-L, --logLevel LEVEL` | `DEBUG` / `INFO` / `WARNING` / `ERROR` / `CRITICAL` |
+| `-l, --logFile PATH` | Log file path (default: stdout) |
+| `-m, --mqttPort PORT` | MQTT broker port |
+| `-n, --name NAME` | Receiver site name |
+| `-P, --mqttPasswd PASS` | MQTT password |
+| `-p, --position lat lon alt` | Receiver GPS position (required) |
+| `-s, --slantDistance min max` | Min/max slant distance filter (NM) |
+| `-u, --mqttUsername USER` | MQTT username |
+| `-v, --verbose` | Increase verbosity (repeat for more) |
+
 Send `SIGUSR1` to a running process (`kill -USR1 <pid>`) to dump all current tracks to stdout.
 
 ### Architecture
@@ -235,6 +254,7 @@ The data flow:
 - **`Tracks`** — thread-safe dict of active tracks keyed by ICAO hex ID. Tracks with `tracking=True` are inside the filter volume. GC runs every 10 seconds; calls `staleTrackHandler(hexId)` before deleting a track. `removeTrack()` and `removeAllTracks()` also invoke the stale handler (used for cleanup on shutdown).
 - **`AircraftDB`** — loads `lib/flightaware-*.csv` into memory. CSV format: `hexCode,tailNumber,aircraftType,aircraftCode`. `getMappings(hexCode)` returns a 4-tuple; indices 2 and 3 are aircraft type and description code.
 - **`JsonFileHandler`** — `watchdog.FileSystemEventHandler` subclass. Listens for `on_created` events (readsb atomically replaces the file), validates the `now`/`messages`/`aircraft` keys, then calls the `newMessages` callback with the parsed dict.
+- **`RouteDB`** — looks up origin/destination airports for a callsign via the `callsignServer` web API (see `AircraftRoute` repo). Results are cached in-memory for the session. Airport codes returned by the server are mapped from IATA to ICAO using an optional OurAirports CSV (`--airportCsv`); if no mapping is found the code is passed through unchanged. `ROUTE_SERVER` defaults to `http://192.168.166.13:5000`.
 - **`BaseMqtt`** — wraps `paho-mqtt`. `publishJson()` accepts either a string or a serializable object and returns `MQTTMessageInfo` for optional `.wait_for_publish()`.
 
 #### MQTT topics (`AdsbMqtt`)
