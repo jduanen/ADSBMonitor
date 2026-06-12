@@ -46,6 +46,7 @@ AIRCRAFT_JSON_FILE = "aircraft.json"
 MQTT_CLIENT_ID = "adsb_vehicles"
 
 DEFAULTS = {
+    'airportCsv': None,
     'altitude': FilterConstraints(),
     'groundDistance': FilterConstraints(),
     'logFile': None,
@@ -89,6 +90,9 @@ class ExitGracefully:
 
 def getOpts():
     ap = argparse.ArgumentParser()
+    ap.add_argument(
+        "-A", "--airportCsv", action="store", type=str,
+        help="Path to OurAirports CSV for IATA→ICAO code conversion")
     ap.add_argument(
         "-a", "--altitude", metavar=["min", "max"], type=int, nargs=2,
         help="Min/max vertical distance filter constraint (from receiver in Feet)")
@@ -350,7 +354,7 @@ def run(options):
                 logging.exception("Exception in newMessages")
         return newMessages
 
-    routeDbObj = RouteDB()
+    routeDbObj = RouteDB(airportCsv=options.get('airportCsv'))
     newMessagesHandler = createNewMessagesHandler(aircraftDbObj, rxSiteObj, tracksObj, mqttClient, routeDbObj)
 
     dumpDir = Path(options['adsbPath'])
