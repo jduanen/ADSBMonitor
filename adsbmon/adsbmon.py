@@ -13,6 +13,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import re
 import signal
 import sys
 import threading
@@ -46,7 +47,6 @@ AIRCRAFT_JSON_FILE = "aircraft.json"
 MQTT_CLIENT_ID = "adsb_vehicles"
 
 DEFAULTS = {
-    'airportCsv': None,
     'altitude': FilterConstraints(),
     'groundDistance': FilterConstraints(),
     'logFile': None,
@@ -61,6 +61,11 @@ DEFAULTS = {
     'slantDistance': FilterConstraints(),
     'verbose': None
 }
+
+EMPTY_MSG = {'track_name': '---', 's_dist': '---', 'g_dist': '---',
+             'alt': '---', 'ac_type': '---', 'hex': '---',
+             'origin_iata': '---', 'origin_icao': '----','origin_code': '--- (----)', 'origin_name': '', 'origin_abbr': '',
+             'dest_iata': '---', 'dest_icao': '----','dest_code': '--- (----)', 'dest_name': '', 'dest_abbr': ''}
 
 
 class ExitGracefully:
@@ -90,9 +95,6 @@ class ExitGracefully:
 
 def getOpts():
     ap = argparse.ArgumentParser()
-    ap.add_argument(
-        "-A", "--airportCsv", action="store", type=str,
-        help="Path to OurAirports CSV for IATA→ICAO code conversion")
     ap.add_argument(
         "-a", "--altitude", metavar=["min", "max"], type=int, nargs=2,
         help="Min/max vertical distance filter constraint (from receiver in Feet)")
@@ -274,6 +276,12 @@ def run(options):
             ''' Function that gets called each time a new list of messages is
                  written to the log file.
             '''
+            def abbreviate(airportName):
+                abbr = re.sub(r'International|Airport|airport',
+                              lambda m: 'Intl' if m.group() in ('International', 'international') else '',
+                              airportName)
+                return abbr
+
             try:
                 msgTime = data['now']
                 for msg in data['aircraft']:
@@ -311,16 +319,31 @@ def run(options):
 
                     callsign = msg.get('flight', '').strip()
                     route = routeDb.getRoute(callsign) if callsign else None
+                    logging.debug(f"route: {route}")
                     if route:
                         msg['origin_iata'] = route['origin_iata']
-                        msg['origin'] = route['origin']
+                        msg['origin_icao'] = route['origin_icao']
+                        msg['origin_code'] = f"{route['origin_iata']} ({route['origin_icao']})"
+                        msg['origin_name'] = route['origin_name']
+                        msg['origin_abbr'] = abbreviate(route['origin_name'])
+
                         msg['dest_iata'] = route['dest_iata']
-                        msg['dest'] = route['dest']
+                        msg['dest_icao'] = route['dest_icao']
+                        msg['dest_code'] = f"{route['dest_iata']} ({route['dest_icao']})"
+                        msg['dest_name'] = route['dest_name']
+                        msg['dest_abbr'] = abbreviate(route['dest_name'])
                     else:
                         msg['origin_iata'] = '---'
-                        msg['origin'] = '---'
+                        msg['origin_icao'] = '----'
+                        msg['origin_code'] = '---' ('----')
+                        msg['origin_name'] = ''
+                        msg['origin_abbr'] = ''
+
                         msg['dest_iata'] = '---'
-                        msg['dest'] = '---'
+                        msg['dest_icao'] = '----'
+                        msg['dest_code'] = '---' ('----')
+                        msg['dest_name'] = ''
+                        msg['dest_abbr'] = ''
 
                     if inVolume:
                         if not trksObj.isInVolume(msg['hex']):
@@ -343,10 +366,7 @@ def run(options):
                 mqttClient.publishTracksCountUpdateMsg(trksObj.numberOfTracks())
                 _nearest = sorted(trksObj.getInVolumeTracks(),
                                   key=lambda m: m.get('s_dist', float('inf')))
-                _empty = {'track_name': '---', 's_dist': '---', 'g_dist': '---',
-                          'alt': '---', 'ac_type': '---', 'hex': '---',
-                          'origin_iata': '---', 'origin': '---',
-                          'dest_iata': '---', 'dest': '---'}
+                _empty = EMPTY_MSG
                 for _rank in range(1, 4):
                     _data = _nearest[_rank - 1] if _rank <= len(_nearest) else _empty
                     mqttClient.publishNearestUpdateMsg(_rank, _data)
@@ -354,7 +374,7 @@ def run(options):
                 logging.exception("Exception in newMessages")
         return newMessages
 
-    routeDbObj = RouteDB(airportCsv=options.get('airportCsv'))
+    routeDbObj = RouteDB()
     newMessagesHandler = createNewMessagesHandler(aircraftDbObj, rxSiteObj, tracksObj, mqttClient, routeDbObj)
 
     dumpDir = Path(options['adsbPath'])
@@ -407,10 +427,7 @@ def run(options):
     tracksObj.removeAllTracks()
     mqttClient.publishTracksCountUpdateMsg(0)
     mqttClient.publishInVolumeCountUpdateMsg(0)
-    _empty = {'track_name': '---', 's_dist': '---', 'g_dist': '---',
-              'alt': '---', 'ac_type': '---', 'hex': '---',
-              'origin_iata': '---', 'origin': '---',
-              'dest_iata': '---', 'dest': '---'}
+    _empty = EMPTY_MSG
     for rank in range(1, 4):
         mqttClient.publishNearestUpdateMsg(rank, _empty)
     info = mqttClient.publishServiceStateMsg(False)
