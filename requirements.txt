@@ -3,5 +3,6 @@ paho.mqtt
 matplotlib
 numpy
 PyYAML
+re
 requests
 watchdog
