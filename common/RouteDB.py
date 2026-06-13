@@ -68,12 +68,12 @@ class RouteDB:
             if not origin or not dest:
                 return None
             return {
-                'origin_icao': origin.get('icao', '?')
-                'origin_iata': origin.get('iata', '?')
+                'origin_icao': origin.get('icao', '?'),
+                'origin_iata': origin.get('iata', '?'),
                 'origin_name': origin.get('name', '?'),
-                'dest_icao': origin.get('icao', '?')
-                'dest_iata': origin.get('iata', '?')
-                'dest_name': origin.get('name', '?'),
+                'dest_icao': origin.get('icao', '?'),
+                'dest_iata': origin.get('iata', '?'),
+                'dest_name': origin.get('name', '?')
             }
         except Exception as e:
             logging.warning("RouteDB: fetch failed for %s: %s", callsign, e)
