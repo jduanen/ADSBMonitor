@@ -64,8 +64,12 @@ DEFAULTS = {
 
 EMPTY_MSG = {'track_name': '---', 's_dist': '---', 'g_dist': '---',
              'alt': '---', 'ac_type': '---', 'hex': '---',
-             'origin_iata': '---', 'origin_icao': '----','origin_code': '--- (----)', 'origin_name': '', 'origin_abbr': '',
-             'dest_iata': '---', 'dest_icao': '----','dest_code': '--- (----)', 'dest_name': '', 'dest_abbr': ''}
+             'origin_iata': '---', 'origin_icao': '----',
+             'origin_code': '--- (----)', 'origin_name': '',
+             'origin_abbr': '',
+             'dest_iata': '---', 'dest_icao': '----',
+             'dest_code': '--- (----)', 'dest_name': '',
+             'dest_abbr': ''}
 
 
 class ExitGracefully:
@@ -335,13 +339,13 @@ def run(options):
                     else:
                         msg['origin_iata'] = '---'
                         msg['origin_icao'] = '----'
-                        msg['origin_code'] = '---' ('----')
+                        msg['origin_code'] = '--- (----)'
                         msg['origin_name'] = ''
                         msg['origin_abbr'] = ''
 
                         msg['dest_iata'] = '---'
                         msg['dest_icao'] = '----'
-                        msg['dest_code'] = '---' ('----')
+                        msg['dest_code'] = '--- (----)'
                         msg['dest_name'] = ''
                         msg['dest_abbr'] = ''
 
