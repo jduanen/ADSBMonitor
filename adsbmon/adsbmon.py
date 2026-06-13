@@ -281,9 +281,7 @@ def run(options):
                  written to the log file.
             '''
             def abbreviate(airportName):
-                abbr = re.sub(r'International|Airport|airport',
-                              lambda m: 'Intl' if m.group() in ('International', 'international') else '',
-                              airportName)
+                abbr = re.sub(r'International|international|Airport|airport', '', airportName)
                 return abbr
 
             try:
