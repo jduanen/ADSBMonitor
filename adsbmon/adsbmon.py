@@ -319,35 +319,35 @@ def run(options):
                     trackName = msg.get('flight', msg['hex']).strip()
                     msg['track_name'] = trackName
 
-                    callsign = msg.get('flight', '').strip()
-                    route = routeDb.getRoute(callsign) if callsign else None
-                    logging.debug(f"route: {route}")
-                    if route:
-                        msg['origin_iata'] = route['origin_iata']
-                        msg['origin_icao'] = route['origin_icao']
-                        msg['origin_code'] = f"{route['origin_iata']} ({route['origin_icao']})"
-                        msg['origin_name'] = route['origin_name']
-                        msg['origin_abbr'] = abbreviate(route['origin_name'])
-
-                        msg['dest_iata'] = route['dest_iata']
-                        msg['dest_icao'] = route['dest_icao']
-                        msg['dest_code'] = f"{route['dest_iata']} ({route['dest_icao']})"
-                        msg['dest_name'] = route['dest_name']
-                        msg['dest_abbr'] = abbreviate(route['dest_name'])
-                    else:
-                        msg['origin_iata'] = '---'
-                        msg['origin_icao'] = '----'
-                        msg['origin_code'] = '--- (----)'
-                        msg['origin_name'] = ''
-                        msg['origin_abbr'] = ''
-
-                        msg['dest_iata'] = '---'
-                        msg['dest_icao'] = '----'
-                        msg['dest_code'] = '--- (----)'
-                        msg['dest_name'] = ''
-                        msg['dest_abbr'] = ''
-
                     if inVolume:
+                        callsign = msg.get('flight', '').strip()
+                        route = routeDb.getRoute(callsign) if callsign else None
+                        logging.debug(f"route: {route}; callsign: {callsign}")
+                        if route:
+                            msg['origin_iata'] = route['origin_iata']
+                            msg['origin_icao'] = route['origin_icao']
+                            msg['origin_code'] = f"{route['origin_iata']} ({route['origin_icao']})"
+                            msg['origin_name'] = route['origin_name']
+                            msg['origin_abbr'] = abbreviate(route['origin_name'])
+
+                            msg['dest_iata'] = route['dest_iata']
+                            msg['dest_icao'] = route['dest_icao']
+                            msg['dest_code'] = f"{route['dest_iata']} ({route['dest_icao']})"
+                            msg['dest_name'] = route['dest_name']
+                            msg['dest_abbr'] = abbreviate(route['dest_name'])
+                        else:
+                            msg['origin_iata'] = '---'
+                            msg['origin_icao'] = '----'
+                            msg['origin_code'] = '--- (----)'
+                            msg['origin_name'] = ''
+                            msg['origin_abbr'] = ''
+
+                            msg['dest_iata'] = '---'
+                            msg['dest_icao'] = '----'
+                            msg['dest_code'] = '--- (----)'
+                            msg['dest_name'] = ''
+                            msg['dest_abbr'] = ''
+
                         if not trksObj.isInVolume(msg['hex']):
                             logging.debug("%s (%s) was not in volume before this", trackName, msg['hex'])
                             mqttClient.publishTrackDiscoveryMsg(msg['hex'], trackName)
