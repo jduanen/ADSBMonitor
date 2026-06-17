@@ -22,6 +22,7 @@ import requests
 ROUTE_SERVER = "http://192.168.166.13:5000"
 REQUEST_TIMEOUT = 10
 
+#### FIXME put in a mechanism to keep the self._routes dict from growing without bound
 
 class RouteDB:
     def __init__(self, serverUrl=ROUTE_SERVER):
@@ -52,6 +53,7 @@ class RouteDB:
         with self._lock:
             self._routes[callsign] = result
             self._pending.discard(callsign)
+            logging.debug("Number of routes in cache: %d", len(self._routes))
 
     def _fetchRoute(self, callsign):
         try:
