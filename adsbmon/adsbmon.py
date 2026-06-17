@@ -226,6 +226,9 @@ def run(options):
     def usr1Handler(sig, frame):
         tracksObj.printAll()
 
+    def usr2Handler(sig, frame):
+        routeDbObj.flushCache()
+
     stopEvent = threading.Event()
     _exit = ExitGracefully(stopEvent)
 
@@ -382,6 +385,7 @@ def run(options):
     dumpDir = Path(options['adsbPath'])
 
     signal.signal(signal.SIGUSR1, usr1Handler)   # 'kill -USR1' to print current tracks
+    signal.signal(signal.SIGUSR2, usr2Handler)   # 'kill -USR2' to flush cache
 
     #### FIXME decide to implement this or not
     '''
