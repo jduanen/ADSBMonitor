@@ -31,6 +31,9 @@ class RouteDB:
         self._pending = set()  # callsigns with an in-flight background fetch
         self._lock = threading.Lock()
 
+    def flushCache(self):
+        self._routes = {}
+
     def getRoute(self, callsign):
         """Return cached route dict for callsign, or None if unknown/pending.
 
@@ -39,6 +42,7 @@ class RouteDB:
 
         Keys when found: origin_icao, origin_iata, origin, dest_icao, dest_iata, dest
         """
+        #### FIXME if it's in the cache, but as None/None, consider doing fetch again? or not?
         with self._lock:
             if callsign in self._routes:
                 return self._routes[callsign]
