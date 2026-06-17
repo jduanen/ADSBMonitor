@@ -32,6 +32,7 @@ class RouteDB:
         self._lock = threading.Lock()
 
     def flushCache(self):
+        logging.debug("Flush cache")
         self._routes = {}
 
     def getRoute(self, callsign):
